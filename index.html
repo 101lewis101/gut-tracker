@@ -526,127 +526,162 @@
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <!-- store.jsx -->
 <script type="text/babel">
-const STORE_KEY = 'gut.v1';
-
-function loadStore() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return { entries: [] };
-    const parsed = JSON.parse(raw);
-    if (!parsed.entries) parsed.entries = [];
-    return parsed;
-  } catch (e) {
-    return { entries: [] };
-  }
-}
-
-function saveStore(s) {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(s));
-  } catch (e) {
-    try {
-      const lite = {
-        ...s,
-        entries: s.entries.map((e) => e.kind === 'food' ? ({ ...e, photo: null }) : e),
-      };
-      localStorage.setItem(STORE_KEY, JSON.stringify(lite));
-    } catch (_) {
-      console.warn('Could not persist store:', e);
-    }
-  }
-}
+const SUPA_URL = 'https://wtwqkxodsaigvypplfqp.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0d3FreG9kc2FpZ3Z5cHBsZnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NTQzODEsImV4cCI6MjA5NDMzMDM4MX0.fL2iX5TbnP2U4UjqQ070n0ZywgMZrMwaGjyrVAFdR3E';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+// Convert DB row → app entry shape
+function rowToEntry(r) {
+  const e = { id: r.id, kind: r.kind, ts: r.ts, notes: r.notes || '' };
+  if (r.kind === 'food') {
+    e.names = r.names || [];
+    e.photo = r.photo_url || null;
+  } else if (r.kind === 'bowel') {
+    e.bristol = r.bristol;
+    e.urgency = r.urgency;
+  } else {
+    e.type = r.symptom_type;
+    e.severity = r.severity;
+  }
+  return e;
+}
+
+// Convert app entry → DB row shape
+function entryToRow(entry, userId) {
+  return {
+    id: entry.id,
+    user_id: userId,
+    kind: entry.kind,
+    ts: entry.ts,
+    notes: entry.notes || '',
+    names: entry.names || null,
+    photo_url: entry.photo || null,
+    bristol: entry.bristol || null,
+    urgency: entry.urgency ?? null,
+    symptom_type: entry.type || null,
+    severity: entry.severity || null,
+  };
+}
+
 function useStore() {
-  const [state, setState] = React.useState(loadStore);
+  const [user, setUser] = React.useState(null);
+  const [authLoading, setAuthLoading] = React.useState(true);
+  const [entries, setEntries] = React.useState([]);
+  const [syncing, setSyncing] = React.useState(false);
 
-  React.useEffect(() => { saveStore(state); }, [state]);
-
+  // Auth state listener
   React.useEffect(() => {
-    const onStorage = (e) => { if (e.key === STORE_KEY) setState(loadStore()); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    supa.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supa.auth.onAuthStateChange((_ev, session) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  const addEntry = React.useCallback((entry) => {
+  // Load entries when user logs in
+  React.useEffect(() => {
+    if (!user) { setEntries([]); return; }
+    setSyncing(true);
+    supa.from('entries').select('*').order('ts', { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data) setEntries(data.map(rowToEntry));
+        setSyncing(false);
+      });
+  }, [user]);
+
+  const addEntry = React.useCallback(async (entry) => {
+    if (!user) return;
     const e = { id: uid(), ts: Date.now(), ...entry };
-    setState((s) => ({ ...s, entries: [e, ...s.entries] }));
-    return e;
-  }, []);
-
-  const deleteEntry = React.useCallback((id) => {
-    setState((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== id) }));
-  }, []);
-
-  const updateEntry = React.useCallback((id, patch) => {
-    setState((s) => ({ ...s, entries: s.entries.map((e) => e.id === id ? { ...e, ...patch } : e) }));
-  }, []);
-
-  const clearAll = React.useCallback(() => {
-    if (confirm('Erase all data? This cannot be undone.')) {
-      setState({ entries: [] });
+    // Optimistic update
+    setEntries(prev => [e, ...prev]);
+    const row = entryToRow(e, user.id);
+    const { error } = await supa.from('entries').insert(row);
+    if (error) {
+      console.error('Insert failed:', error);
+      setEntries(prev => prev.filter(x => x.id !== e.id));
     }
+    return e;
+  }, [user]);
+
+  const deleteEntry = React.useCallback(async (id) => {
+    setEntries(prev => prev.filter(e => e.id !== id));
+    await supa.from('entries').delete().eq('id', id);
   }, []);
 
-  const seedDemo = React.useCallback(() => {
-    if (state.entries.length && !confirm('Replace existing data with demo data?')) return;
-    const now = Date.now();
-    const day = 86400000;
-    const hr = 3600000;
+  const clearAll = React.useCallback(async () => {
+    if (!confirm('Erase all data? This cannot be undone.')) return;
+    setEntries([]);
+    await supa.from('entries').delete().eq('user_id', user.id);
+  }, [user]);
+
+  const seedDemo = React.useCallback(async () => {
+    if (entries.length && !confirm('Replace existing data with demo data?')) return;
+    const now = Date.now(), day = 86400000, hr = 3600000;
     const demo = [];
     const push = (offsetMs, e) => demo.push({ id: uid(), ts: now - offsetMs, ...e });
-
     const meals = [
-      ['scrambled eggs', 'sourdough toast', 'coffee'],
-      ['oatmeal', 'banana', 'coffee'],
-      ['greek yogurt', 'berries', 'granola'],
-      ['chicken caesar salad'],
-      ['turkey sandwich', 'apple'],
-      ['lentil soup', 'crackers'],
-      ['salmon', 'rice', 'broccoli'],
-      ['pasta carbonara', 'red wine'],
-      ['pad thai'],
-      ['burger', 'fries', 'beer'],
-      ['pizza', 'beer'],
-      ['stir fry', 'rice'],
-      ['burrito bowl'],
-      ['ice cream'],
-      ['milk', 'cookies'],
-      ['cheese plate', 'wine'],
+      ['scrambled eggs', 'sourdough toast', 'coffee'],['oatmeal', 'banana', 'coffee'],
+      ['greek yogurt', 'berries', 'granola'],['chicken caesar salad'],
+      ['turkey sandwich', 'apple'],['lentil soup', 'crackers'],
+      ['salmon', 'rice', 'broccoli'],['pasta carbonara', 'red wine'],
+      ['pad thai'],['burger', 'fries', 'beer'],['pizza', 'beer'],
+      ['stir fry', 'rice'],['burrito bowl'],['ice cream'],
+      ['milk', 'cookies'],['cheese plate', 'wine'],
     ];
     for (let d = 13; d >= 0; d--) {
       const base = d * day;
-      const m1 = meals[(d * 3) % meals.length];
-      const m2 = meals[(d * 3 + 1) % meals.length];
-      const m3 = meals[(d * 3 + 2) % meals.length];
-      push(base + 14 * hr, { kind: 'food', names: m1, notes: '' });
-      push(base + 7 * hr,  { kind: 'food', names: m2, notes: '' });
-      push(base + 1 * hr,  { kind: 'food', names: m3, notes: '' });
-      push(base + 12 * hr, { kind: 'bowel', bristol: 3 + ((d) % 4), urgency: ((d) % 3), notes: '' });
-      const triggers = [...m1, ...m2, ...m3];
-      const hasDairy = triggers.some((t) => /milk|cheese|ice cream|yogurt|carbonara|pizza/.test(t));
-      const hasAlcohol = triggers.some((t) => /wine|beer/.test(t));
-      if (hasDairy && Math.random() < 0.75) {
-        push(base + 9 * hr, { kind: 'symptom', type: 'bloat', severity: 3 + Math.round(Math.random()), notes: '' });
-      }
-      if (hasAlcohol && Math.random() < 0.6) {
-        push(base + 22 * hr - day, { kind: 'symptom', type: 'cramps', severity: 2 + Math.round(Math.random()*2), notes: '' });
-      }
+      const m1 = meals[(d*3)%meals.length], m2 = meals[(d*3+1)%meals.length], m3 = meals[(d*3+2)%meals.length];
+      push(base+14*hr, { kind:'food', names:m1, notes:'' });
+      push(base+7*hr,  { kind:'food', names:m2, notes:'' });
+      push(base+1*hr,  { kind:'food', names:m3, notes:'' });
+      push(base+12*hr, { kind:'bowel', bristol:3+(d%4), urgency:d%3, notes:'' });
+      const all = [...m1,...m2,...m3];
+      if (all.some(t=>/milk|cheese|ice cream|yogurt|carbonara|pizza/.test(t)) && Math.random()<0.75)
+        push(base+9*hr, { kind:'symptom', type:'bloat', severity:3+Math.round(Math.random()), notes:'' });
+      if (all.some(t=>/wine|beer/.test(t)) && Math.random()<0.6)
+        push(base+22*hr-day, { kind:'symptom', type:'cramps', severity:2+Math.round(Math.random()*2), notes:'' });
     }
-    demo.sort((a, b) => b.ts - a.ts);
-    setState({ entries: demo });
-  }, [state]);
+    demo.sort((a,b)=>b.ts-a.ts);
+    setEntries(demo);
+    await supa.from('entries').delete().eq('user_id', user.id);
+    const rows = demo.map(e => entryToRow(e, user.id));
+    await supa.from('entries').insert(rows);
+  }, [entries, user]);
 
-  return { state, addEntry, deleteEntry, updateEntry, clearAll, seedDemo };
+  const state = { entries };
+  return { state, user, authLoading, syncing, addEntry, deleteEntry, clearAll, seedDemo };
 }
 
-window.GutStore = { useStore, loadStore, saveStore };
+// Upload a base64 photo to Supabase Storage, return public URL
+async function uploadPhoto(dataUrl, userId) {
+  const { resizeImageToDataUrl } = window.GutUtil || {};
+  const base64 = dataUrl.split(',')[1];
+  const byteStr = atob(base64);
+  const arr = new Uint8Array(byteStr.length);
+  for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+  const blob = new Blob([arr], { type: 'image/jpeg' });
+  const path = `${userId}/${uid()}.jpg`;
+  const { error } = await supa.storage.from('photos').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) throw error;
+  const { data } = supa.storage.from('photos').getPublicUrl(path);
+  // Photos bucket is private — use signed URL instead
+  const { data: signed } = await supa.storage.from('photos').createSignedUrl(path, 60 * 60 * 24 * 365);
+  return signed?.signedUrl || null;
+}
+
+window.GutStore = { useStore, uploadPhoto, supa };
 </script>
 
 <!-- util.jsx -->
@@ -939,7 +974,8 @@ function AddSheet({ kind, onClose, onSave }) {
 
 function FoodForm({ onSave, onClose }) {
   const { resizeImageToDataUrl, identifyFoodFromImage, normalizeFood } = window.GutUtil;
-  const [photo, setPhoto] = React.useState(null);
+  const [photo, setPhoto] = React.useState(null);       // local preview dataURL
+  const [photoUrl, setPhotoUrl] = React.useState(null); // Supabase Storage URL
   const [names, setNames] = React.useState([]);
   const [draft, setDraft] = React.useState('');
   const [notes, setNotes] = React.useState('');
@@ -953,7 +989,18 @@ function FoodForm({ onSave, onClose }) {
     setIdentifyMsg('');
     try {
       const dataUrl = await resizeImageToDataUrl(file, 1024, 0.82);
-      setPhoto(dataUrl);
+      setPhoto(dataUrl); // local preview
+      // Upload to Supabase Storage
+      const { data: { user } } = await window.GutStore.supa.auth.getUser();
+      if (user) {
+        try {
+          const url = await window.GutStore.uploadPhoto(dataUrl, user.id);
+          setPhotoUrl(url);
+        } catch (uploadErr) {
+          console.warn('Photo upload failed, keeping local preview:', uploadErr);
+        }
+      }
+      // AI identification
       const result = await identifyFoodFromImage(dataUrl);
       if (result.ok && result.names.length) {
         setNames((prev) => Array.from(new Set([...prev, ...result.names.map(normalizeFood)])));
@@ -981,7 +1028,8 @@ function FoodForm({ onSave, onClose }) {
 
   const submit = () => {
     if (names.length === 0 && !notes.trim()) return;
-    onSave({ kind: 'food', names, notes: notes.trim(), photo });
+    // Use Supabase URL if uploaded, fall back to local preview
+    onSave({ kind: 'food', names, notes: notes.trim(), photo: photoUrl || photo });
     onClose();
   };
 
@@ -1013,7 +1061,7 @@ function FoodForm({ onSave, onClose }) {
         {photo && (
           <div className="row" style={{ marginTop: 4 }}>
             <button className="btn btn-sm" onClick={() => fileRef.current && fileRef.current.click()}>Retake</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => { setPhoto(null); setIdentifyMsg(''); }}>Remove photo</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => { setPhoto(null); setPhotoUrl(null); setIdentifyMsg(''); }}>Remove photo</button>
           </div>
         )}
         {identifying && <div className="muted" style={{ fontSize: 12 }}>Identifying food…</div>}
@@ -1604,14 +1652,90 @@ window.GutShare = { generateHistoryHTML, generateInsightsHTML, shareContent };
 
 <!-- app.jsx -->
 <script type="text/babel">
+function LoginScreen() {
+  const [email, setEmail] = React.useState('');
+  const [sent, setSent] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setLoading(true); setError('');
+    const { error } = await window.GutStore.supa.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.href },
+    });
+    setLoading(false);
+    if (error) setError(error.message);
+    else setSent(true);
+  };
+
+  return (
+    <div className="app" style={{ alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div style={{ width: '100%', maxWidth: 360, padding: '0 24px' }}>
+        <h1 className="serif" style={{ fontSize: 42, marginBottom: 4 }}>Gut</h1>
+        <p className="muted" style={{ fontSize: 14, marginBottom: 28 }}>Food &amp; gut health tracker</p>
+        {sent ? (
+          <div className="card" style={{ textAlign: 'center', padding: 28 }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>✉️</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Check your email</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              We sent a magic link to <strong>{email}</strong>.<br />
+              Click it to sign in — no password needed.
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="stack">
+            <div className="field">
+              <div className="label">Your email address</div>
+              <input
+                className="input"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+            {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+            <button className="btn btn-primary btn-block" type="submit" disabled={loading}>
+              {loading ? 'Sending…' : 'Send magic link'}
+            </button>
+            <div className="muted" style={{ fontSize: 12, textAlign: 'center' }}>
+              No password needed. We'll email you a one-click sign-in link.
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const { state, addEntry, deleteEntry, clearAll, seedDemo } = window.GutStore.useStore();
+  const { state, user, authLoading, syncing, addEntry, deleteEntry, clearAll, seedDemo } = window.GutStore.useStore();
   const [tab, setTab] = React.useState('today');
   const [addKind, setAddKind] = React.useState(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
 
+  if (authLoading) {
+    return (
+      <div className="app" style={{ alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div className="muted" style={{ fontSize: 14 }}>Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginScreen />;
+
   const today = new Date();
   const dateLabel = today.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+
+  const signOut = async () => {
+    await window.GutStore.supa.auth.signOut();
+    setMenuOpen(false);
+  };
 
   return (
     <div className="app">
@@ -1619,6 +1743,7 @@ function App() {
         <h1>Gut</h1>
         <div className="row" style={{ gap: 8 }}>
           <div className="date">{dateLabel}</div>
+          {syncing && <div className="muted" style={{ fontSize: 11 }}>↑</div>}
           <button className="btn btn-sm btn-ghost" onClick={() => setMenuOpen((v) => !v)} aria-label="Menu">⋯</button>
         </div>
       </header>
@@ -1629,9 +1754,10 @@ function App() {
             <button className="btn btn-sm" onClick={() => { seedDemo(); setMenuOpen(false); }}>Load demo data</button>
             <button className="btn btn-sm" onClick={() => { exportJson(state); setMenuOpen(false); }}>Export JSON</button>
             <button className="btn btn-sm btn-ghost" onClick={() => { clearAll(); setMenuOpen(false); }}>Erase all</button>
+            <button className="btn btn-sm btn-ghost" onClick={signOut}>Sign out</button>
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-            All data lives locally in your browser. Nothing is uploaded.
+            Signed in as {user.email} · synced to Supabase
           </div>
         </div>
       )}
@@ -1651,7 +1777,7 @@ function App() {
         )}
 
         <div className="footer-hint">
-          {state.entries.length} entries · stored locally
+          {state.entries.length} entries · synced to cloud
         </div>
       </main>
 
