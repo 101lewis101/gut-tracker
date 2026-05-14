@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Gut — food &amp; gut health tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:        oklch(0.975 0.008 80);
+    --bg-2:      oklch(0.955 0.010 80);
+    --surface:   oklch(1    0     0);
+    --text:      oklch(0.20 0.012 60);
+    --text-soft: oklch(0.40 0.010 60);
+    --muted:     oklch(0.58 0.010 60);
+    --line:      oklch(0.91 0.008 80);
+    --line-2:    oklch(0.86 0.010 80);
+    --accent:    oklch(0.55 0.10  145);
+    --accent-2:  oklch(0.45 0.10  145);
+    --accent-soft: oklch(0.94 0.035 145);
+    --warn:      oklch(0.62 0.13  50);
+    --warn-soft: oklch(0.96 0.035 50);
+    --danger:    oklch(0.55 0.16  25);
+    --danger-soft: oklch(0.96 0.035 25);
+    --radius: 14px;
+    --radius-sm: 10px;
+    --radius-lg: 20px;
+  }
+  * { box-sizing: border-box; }
+  html, body, #root { margin: 0; padding: 0; min-height: 100%; }
+  html, body { background: var(--bg); }
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input, textarea, select { font-family: inherit; color: inherit; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  .serif { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }
+  .mono  { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* App shell */
+  .app {
+    max-width: 720px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    position: relative;
+  }
+  .topbar {
+    padding: 22px 22px 8px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .topbar h1 {
+    margin: 0;
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 34px;
+    letter-spacing: -0.01em;
+  }
+  .topbar .date {
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  main {
+    padding: 8px 22px 110px;
+    flex: 1;
+  }
+
+  /* Tabs */
+  .tabs {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 28px);
+    max-width: 540px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    z-index: 50;
+    box-shadow: 0 6px 30px -16px oklch(0.2 0.01 60 / 0.18);
+  }
+  .tab {
+    border: 0;
+    background: transparent;
+    color: var(--text-soft);
+    padding: 10px 8px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    transition: background .15s, color .15s;
+  }
+  .tab[data-active="true"] { background: var(--text); color: var(--bg); }
+  .tab:not([data-active="true"]):hover { background: var(--bg-2); color: var(--text); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .card + .card { margin-top: 10px; }
+  .card-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; min-width: 0; }
+  .muted { color: var(--muted); }
+  .soft  { color: var(--text-soft); }
+
+  /* Buttons */
+  .btn {
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background .12s, border-color .12s, transform .05s;
+  }
+  .btn:hover { background: var(--bg-2); }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+  .btn-primary:hover { background: oklch(0.28 0.01 60); }
+  .btn-accent {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn-accent:hover { background: var(--accent-2); }
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-soft);
+  }
+  .btn-ghost:hover { background: var(--bg-2); color: var(--text); }
+  .btn-block { width: 100%; justify-content: center; }
+  .btn-sm { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+
+  /* Form */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .input, .textarea, .select {
+    width: 100%;
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 11px 12px;
+    font-size: 15px;
+    color: var(--text);
+    transition: border-color .12s, background .12s;
+  }
+  .input:focus, .textarea:focus, .select:focus {
+    outline: none;
+    border-color: var(--text);
+  }
+  .textarea { resize: vertical; min-height: 80px; }
+
+  /* Chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    color: var(--text-soft);
+    padding: 6px 11px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .12s;
+    user-select: none;
+  }
+  .chip:hover { background: var(--bg-2); }
+  .chip[data-on="true"] {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+
+  /* Photo zone */
+  .photo-zone {
+    border: 1.5px dashed var(--line-2);
+    background: var(--bg-2);
+    border-radius: var(--radius);
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+  }
+  .photo-zone img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-zone .ph {
+    text-align: center;
+    font-size: 13px;
+    padding: 16px;
+  }
+  .photo-zone .ph .glyph {
+    font-family: 'Instrument Serif', serif;
+    font-size: 38px;
+    line-height: 1;
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-soft);
+  }
+
+  /* Bristol scale */
+  .bristol-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .bristol-cell {
+    aspect-ratio: 1;
+    border: 1px solid var(--line-2);
+    border-radius: 10px;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 4px;
+    transition: all .12s;
+  }
+  .bristol-cell .n {
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    color: var(--text);
+    line-height: 1;
+  }
+  .bristol-cell[data-on="true"] {
+    background: var(--text);
+    border-color: var(--text);
+  }
+  .bristol-cell[data-on="true"] .n { color: var(--bg); }
+  .bristol-cell[data-on="true"] { color: var(--bg); }
+
+  /* Log entries */
+  .entry {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .entry:last-child { border-bottom: 0; }
+  .entry .time {
+    font-size: 12px;
+    color: var(--muted);
+    width: 50px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+    padding-top: 2px;
+  }
+  .entry .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 8px;
+    flex-shrink: 0;
+  }
+  .entry .body { flex: 1; min-width: 0; }
+  .entry .title-line {
+    font-weight: 500;
+    font-size: 14.5px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .entry .meta {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .entry .thumb {
+    width: 44px; height: 44px;
+    border-radius: 8px;
+    object-fit: cover;
+    margin-left: auto;
+    background: var(--bg-2);
+  }
+  .entry .del {
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 4px 6px;
+    opacity: 0;
+    transition: opacity .12s;
+  }
+  .entry:hover .del { opacity: 1; }
+  .entry .del:hover { color: var(--danger); }
+
+  .dot-food   { background: oklch(0.65 0.13 60); }
+  .dot-bowel  { background: oklch(0.55 0.10 145); }
+  .dot-symp   { background: oklch(0.60 0.16 25); }
+
+  /* Insights */
+  .insight-row {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .insight-row:last-child { border-bottom: 0; }
+  .insight-name {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .insight-name .name { font-weight: 500; font-size: 15px; }
+  .insight-name .score {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .bar {
+    height: 6px;
+    background: var(--bg-2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar > span {
+    display: block;
+    height: 100%;
+    background: var(--text);
+    border-radius: 999px;
+  }
+  .bar.warn > span { background: var(--warn); }
+  .bar.danger > span { background: var(--danger); }
+  .insight-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+    display: flex;
+    gap: 12px;
+  }
+
+  /* Empty state */
+  .empty {
+    padding: 36px 18px;
+    text-align: center;
+    color: var(--muted);
+    border: 1px dashed var(--line-2);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .empty .glyph {
+    font-family: 'Instrument Serif', serif;
+    font-size: 42px;
+    color: var(--text-soft);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .empty .t { color: var(--text); font-weight: 500; margin-bottom: 4px; }
+  .empty .s { font-size: 13px; }
+
+  /* Sheet (modal) */
+  .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: oklch(0.20 0.012 60 / 0.4);
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: fade .15s ease;
+  }
+  .sheet {
+    width: 100%;
+    max-width: 720px;
+    background: var(--bg);
+    border-radius: 22px 22px 0 0;
+    padding: 18px 20px 28px;
+    max-height: 92vh;
+    overflow-y: auto;
+    animation: slideup .18s cubic-bezier(.2,.7,.3,1);
+  }
+  .sheet h2 {
+    margin: 4px 0 14px;
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: 26px;
+  }
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--line-2);
+    border-radius: 999px;
+    margin: 0 auto 10px;
+  }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideup { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* Misc */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+  .stat .v {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    line-height: 1;
+  }
+  .stat .k {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .severity-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+  .severity-cell {
+    aspect-ratio: 1.4;
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Instrument Serif', serif;
+    font-size: 20px;
+    color: var(--text-soft);
+    cursor: pointer;
+  }
+  .severity-cell[data-on="true"] {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+
+  .hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-2);
+    color: var(--text-soft);
+    letter-spacing: 0.02em;
+  }
+  .tag.accent { background: var(--accent-soft); color: var(--accent-2); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.danger { background: var(--danger-soft); color: var(--danger); }
+
+  /* Day group */
+  .day-head {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 18px 0 6px;
+    font-weight: 600;
+  }
+
+  .footer-hint {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 14px 0 30px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- store.jsx -->
+<script type="text/babel">
+const STORE_KEY = 'gut.v1';
+
+function loadStore() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return { entries: [] };
+    const parsed = JSON.parse(raw);
+    if (!parsed.entries) parsed.entries = [];
+    return parsed;
+  } catch (e) {
+    return { entries: [] };
+  }
+}
+
+function saveStore(s) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  } catch (e) {
+    try {
+      const lite = {
+        ...s,
+        entries: s.entries.map((e) => e.kind === 'food' ? ({ ...e, photo: null }) : e),
+      };
+      localStorage.setItem(STORE_KEY, JSON.stringify(lite));
+    } catch (_) {
+      console.warn('Could not persist store:', e);
+    }
+  }
+}
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function useStore() {
+  const [state, setState] = React.useState(loadStore);
+
+  React.useEffect(() => { saveStore(state); }, [state]);
+
+  React.useEffect(() => {
+    const onStorage = (e) => { if (e.key === STORE_KEY) setState(loadStore()); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const addEntry = React.useCallback((entry) => {
+    const e = { id: uid(), ts: Date.now(), ...entry };
+    setState((s) => ({ ...s, entries: [e, ...s.entries] }));
+    return e;
+  }, []);
+
+  const deleteEntry = React.useCallback((id) => {
+    setState((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== id) }));
+  }, []);
+
+  const updateEntry = React.useCallback((id, patch) => {
+    setState((s) => ({ ...s, entries: s.entries.map((e) => e.id === id ? { ...e, ...patch } : e) }));
+  }, []);
+
+  const clearAll = React.useCallback(() => {
+    if (confirm('Erase all data? This cannot be undone.')) {
+      setState({ entries: [] });
+    }
+  }, []);
+
+  const seedDemo = React.useCallback(() => {
+    if (state.entries.length && !confirm('Replace existing data with demo data?')) return;
+    const now = Date.now();
+    const day = 86400000;
+    const hr = 3600000;
+    const demo = [];
+    const push = (offsetMs, e) => demo.push({ id: uid(), ts: now - offsetMs, ...e });
+
+    const meals = [
+      ['scrambled eggs', 'sourdough toast', 'coffee'],
+      ['oatmeal', 'banana', 'coffee'],
+      ['greek yogurt', 'berries', 'granola'],
+      ['chicken caesar salad'],
+      ['turkey sandwich', 'apple'],
+      ['lentil soup', 'crackers'],
+      ['salmon', 'rice', 'broccoli'],
+      ['pasta carbonara', 'red wine'],
+      ['pad thai'],
+      ['burger', 'fries', 'beer'],
+      ['pizza', 'beer'],
+      ['stir fry', 'rice'],
+      ['burrito bowl'],
+      ['ice cream'],
+      ['milk', 'cookies'],
+      ['cheese plate', 'wine'],
+    ];
+    for (let d = 13; d >= 0; d--) {
+      const base = d * day;
+      const m1 = meals[(d * 3) % meals.length];
+      const m2 = meals[(d * 3 + 1) % meals.length];
+      const m3 = meals[(d * 3 + 2) % meals.length];
+      push(base + 14 * hr, { kind: 'food', names: m1, notes: '' });
+      push(base + 7 * hr,  { kind: 'food', names: m2, notes: '' });
+      push(base + 1 * hr,  { kind: 'food', names: m3, notes: '' });
+      push(base + 12 * hr, { kind: 'bowel', bristol: 3 + ((d) % 4), urgency: ((d) % 3), notes: '' });
+      const triggers = [...m1, ...m2, ...m3];
+      const hasDairy = triggers.some((t) => /milk|cheese|ice cream|yogurt|carbonara|pizza/.test(t));
+      const hasAlcohol = triggers.some((t) => /wine|beer/.test(t));
+      if (hasDairy && Math.random() < 0.75) {
+        push(base + 9 * hr, { kind: 'symptom', type: 'bloat', severity: 3 + Math.round(Math.random()), notes: '' });
+      }
+      if (hasAlcohol && Math.random() < 0.6) {
+        push(base + 22 * hr - day, { kind: 'symptom', type: 'cramps', severity: 2 + Math.round(Math.random()*2), notes: '' });
+      }
+    }
+    demo.sort((a, b) => b.ts - a.ts);
+    setState({ entries: demo });
+  }, [state]);
+
+  return { state, addEntry, deleteEntry, updateEntry, clearAll, seedDemo };
+}
+
+window.GutStore = { useStore, loadStore, saveStore };
+</script>
+
+<!-- util.jsx -->
+<script type="text/babel">
+function fmtTime(ts) {
+  const d = new Date(ts);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
+function fmtDayHeading(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(today) - startOfDay(d)) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return d.toLocaleDateString(undefined, { weekday: 'long' });
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function fmtDateKey(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function groupByDay(entries) {
+  const groups = [];
+  let current = null;
+  for (const e of entries) {
+    const key = fmtDateKey(e.ts);
+    if (!current || current.key !== key) {
+      current = { key, label: fmtDayHeading(e.ts), items: [] };
+      groups.push(current);
+    }
+    current.items.push(e);
+  }
+  return groups;
+}
+
+async function resizeImageToDataUrl(file, maxDim = 1024, quality = 0.82) {
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = URL.createObjectURL(file);
+  });
+  let { width, height } = img;
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  width = Math.round(width * scale);
+  height = Math.round(height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, width, height);
+  URL.revokeObjectURL(img.src);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+function stripDataUrl(dataUrl) {
+  const i = dataUrl.indexOf(',');
+  return i >= 0 ? dataUrl.slice(i + 1) : dataUrl;
+}
+
+async function identifyFoodFromImage(dataUrl) {
+  if (!window.claude || typeof window.claude.complete !== 'function') {
+    return { ok: false, reason: 'no-ai', names: [] };
+  }
+  const b64 = stripDataUrl(dataUrl);
+  const prompt =
+    'You are identifying food in a photo for a gut-health journal. ' +
+    'Reply with ONLY a JSON array of short food names (1-4 items), no prose, no markdown. ' +
+    'Use common names like "scrambled eggs", "white rice", "coffee with milk". ' +
+    'If you cannot see food, return [].';
+  try {
+    let text;
+    try {
+      text = await window.claude.complete({
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+      });
+    } catch (e) {
+      text = await window.claude.complete(prompt + ' (image attached as data url length=' + b64.length + ')');
+    }
+    const cleaned = String(text).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    const arr = JSON.parse(cleaned);
+    if (Array.isArray(arr)) {
+      return { ok: true, names: arr.filter((x) => typeof x === 'string' && x.trim()).map((s) => s.trim().toLowerCase()) };
+    }
+    return { ok: false, reason: 'parse', names: [] };
+  } catch (e) {
+    return { ok: false, reason: 'error', names: [], error: String(e) };
+  }
+}
+
+function normalizeFood(name) {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+window.GutUtil = {
+  fmtTime, fmtDayHeading, fmtDateKey, groupByDay,
+  resizeImageToDataUrl, identifyFoodFromImage, normalizeFood,
+};
+</script>
+
+<!-- components.jsx -->
+<script type="text/babel">
+function Sheet({ open, onClose, title, children }) {
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet" role="dialog" aria-modal="true">
+        <div className="sheet-handle" />
+        {title ? <h2>{title}</h2> : null}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Chip({ on, onClick, children }) {
+  return (
+    <button type="button" className="chip" data-on={on ? 'true' : 'false'} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function EmptyState({ glyph, title, sub }) {
+  return (
+    <div className="empty">
+      <div className="glyph">{glyph}</div>
+      <div className="t">{title}</div>
+      <div className="s">{sub}</div>
+    </div>
+  );
+}
+
+function EntryRow({ entry, onDelete }) {
+  const { fmtTime } = window.GutUtil;
+  let dotCls = 'dot dot-food';
+  let title = null;
+  let meta = null;
+  let thumb = null;
+
+  if (entry.kind === 'food') {
+    dotCls = 'dot dot-food';
+    title = (entry.names || []).join(', ') || 'Meal';
+    meta = entry.notes ? entry.notes : null;
+    if (entry.photo) thumb = <img className="thumb" src={entry.photo} alt="" />;
+  } else if (entry.kind === 'bowel') {
+    dotCls = 'dot dot-bowel';
+    const desc = bristolLabels[entry.bristol] || `Type ${entry.bristol}`;
+    title = <>Bowel movement <span className="tag accent mono">type {entry.bristol}</span></>;
+    meta = `${desc}${entry.urgency ? ` · urgency ${'·'.repeat(entry.urgency)}` : ''}${entry.notes ? ` · ${entry.notes}` : ''}`;
+  } else if (entry.kind === 'symptom') {
+    dotCls = 'dot dot-symp';
+    const sevCls = entry.severity >= 4 ? 'danger' : entry.severity >= 3 ? 'warn' : 'accent';
+    title = <>{capitalize(entry.type)} <span className={`tag ${sevCls}`}>{'·'.repeat(entry.severity)}</span></>;
+    meta = entry.notes || null;
+  }
+
+  return (
+    <div className="entry">
+      <div className="time">{fmtTime(entry.ts)}</div>
+      <div className={dotCls} />
+      <div className="body">
+        <div className="title-line">{title}</div>
+        {meta ? <div className="meta">{meta}</div> : null}
+      </div>
+      {thumb}
+      <button className="del" onClick={() => onDelete(entry.id)} aria-label="Delete">delete</button>
+    </div>
+  );
+}
+
+const bristolLabels = {
+  1: 'Hard lumps — constipated',
+  2: 'Lumpy, sausage-shaped',
+  3: 'Sausage with cracks',
+  4: 'Smooth, soft — ideal',
+  5: 'Soft blobs, clear edges',
+  6: 'Mushy, ragged edges',
+  7: 'Liquid — diarrhea',
+};
+
+function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+
+Object.assign(window, { Sheet, Chip, EmptyState, EntryRow, bristolLabels, capitalize });
+</script>
+
+<!-- views/today.jsx -->
+<script type="text/babel">
+function TodayView({ state, onAdd, onDelete }) {
+  const { fmtDateKey } = window.GutUtil;
+  const todayKey = fmtDateKey(Date.now());
+  const todays = state.entries.filter((e) => fmtDateKey(e.ts) === todayKey);
+
+  const meals = todays.filter((e) => e.kind === 'food').length;
+  const bowels = todays.filter((e) => e.kind === 'bowel').length;
+  const symptoms = todays.filter((e) => e.kind === 'symptom').length;
+
+  return (
+    <div className="stack">
+      <div className="stat-grid">
+        <div className="stat">
+          <div className="v">{meals}</div>
+          <div className="k">Meals</div>
+        </div>
+        <div className="stat">
+          <div className="v">{bowels}</div>
+          <div className="k">Bowel</div>
+        </div>
+        <div className="stat">
+          <div className="v">{symptoms}</div>
+          <div className="k">Symptoms</div>
+        </div>
+      </div>
+
+      <div className="row" style={{ gap: 8, marginTop: 4 }}>
+        <button className="btn btn-accent grow" onClick={() => onAdd('food')}>
+          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 0.8 }}>+</span>
+          Log meal
+        </button>
+        <button className="btn grow" onClick={() => onAdd('bowel')}>
+          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 0.8 }}>+</span>
+          Bowel
+        </button>
+        <button className="btn grow" onClick={() => onAdd('symptom')}>
+          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 0.8 }}>+</span>
+          Symptom
+        </button>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Today</div>
+        {todays.length === 0 ? (
+          <EmptyState
+            glyph="·"
+            title="Nothing logged yet today"
+            sub="Tap a button above to start"
+          />
+        ) : (
+          <div>
+            {todays.map((e) => (
+              <EntryRow key={e.id} entry={e} onDelete={onDelete} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+window.TodayView = TodayView;
+</script>
+
+<!-- views/add.jsx -->
+<script type="text/babel">
+function AddSheet({ kind, onClose, onSave }) {
+  if (!kind) return null;
+  const titles = { food: 'Log a meal', bowel: 'Log bowel movement', symptom: 'Log a symptom' };
+  return (
+    <Sheet open={!!kind} onClose={onClose} title={titles[kind]}>
+      {kind === 'food' && <FoodForm onSave={onSave} onClose={onClose} />}
+      {kind === 'bowel' && <BowelForm onSave={onSave} onClose={onClose} />}
+      {kind === 'symptom' && <SymptomForm onSave={onSave} onClose={onClose} />}
+    </Sheet>
+  );
+}
+
+function FoodForm({ onSave, onClose }) {
+  const { resizeImageToDataUrl, identifyFoodFromImage, normalizeFood } = window.GutUtil;
+  const [photo, setPhoto] = React.useState(null);
+  const [names, setNames] = React.useState([]);
+  const [draft, setDraft] = React.useState('');
+  const [notes, setNotes] = React.useState('');
+  const [identifying, setIdentifying] = React.useState(false);
+  const [identifyMsg, setIdentifyMsg] = React.useState('');
+  const fileRef = React.useRef(null);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setIdentifying(true);
+    setIdentifyMsg('');
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 1024, 0.82);
+      setPhoto(dataUrl);
+      const result = await identifyFoodFromImage(dataUrl);
+      if (result.ok && result.names.length) {
+        setNames((prev) => Array.from(new Set([...prev, ...result.names.map(normalizeFood)])));
+        setIdentifyMsg(`Identified: ${result.names.join(', ')}. Tap to remove or add more.`);
+      } else if (result.reason === 'no-ai') {
+        setIdentifyMsg('AI identification not available here — type the foods below.');
+      } else {
+        setIdentifyMsg("Couldn't identify automatically — type the foods below.");
+      }
+    } catch (e) {
+      setIdentifyMsg('Image upload failed: ' + e.message);
+    } finally {
+      setIdentifying(false);
+    }
+  };
+
+  const addName = () => {
+    const t = normalizeFood(draft);
+    if (!t) return;
+    setNames((prev) => prev.includes(t) ? prev : [...prev, t]);
+    setDraft('');
+  };
+
+  const removeName = (n) => setNames((prev) => prev.filter((x) => x !== n));
+
+  const submit = () => {
+    if (names.length === 0 && !notes.trim()) return;
+    onSave({ kind: 'food', names, notes: notes.trim(), photo });
+    onClose();
+  };
+
+  return (
+    <div className="stack">
+      <div className="field">
+        <div className="label">Photo</div>
+        <div className="photo-zone" onClick={() => fileRef.current && fileRef.current.click()}>
+          {photo ? (
+            <img src={photo} alt="meal" />
+          ) : (
+            <div className="ph">
+              <span className="glyph">◇</span>
+              <div>Tap to take a photo or pick from library</div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                AI will try to identify the food
+              </div>
+            </div>
+          )}
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={(e) => handleFile(e.target.files && e.target.files[0])}
+        />
+        {photo && (
+          <div className="row" style={{ marginTop: 4 }}>
+            <button className="btn btn-sm" onClick={() => fileRef.current && fileRef.current.click()}>Retake</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => { setPhoto(null); setIdentifyMsg(''); }}>Remove photo</button>
+          </div>
+        )}
+        {identifying && <div className="muted" style={{ fontSize: 12 }}>Identifying food…</div>}
+        {identifyMsg && !identifying && <div className="muted" style={{ fontSize: 12 }}>{identifyMsg}</div>}
+      </div>
+
+      <div className="field">
+        <div className="label">Foods</div>
+        <div className="chips">
+          {names.map((n) => (
+            <Chip key={n} on={true} onClick={() => removeName(n)}>{n} ×</Chip>
+          ))}
+          {names.length === 0 && <div className="muted" style={{ fontSize: 13 }}>No items yet</div>}
+        </div>
+        <div className="row" style={{ marginTop: 6 }}>
+          <input
+            className="input grow"
+            placeholder="Add a food (e.g. yogurt)"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addName(); } }}
+          />
+          <button className="btn" onClick={addName}>Add</button>
+        </div>
+      </div>
+
+      <div className="field">
+        <div className="label">Notes (optional)</div>
+        <textarea
+          className="textarea"
+          placeholder="Portion, restaurant, how it felt…"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      <button className="btn btn-primary btn-block" onClick={submit} disabled={names.length === 0 && !notes.trim()}>
+        Save meal
+      </button>
+    </div>
+  );
+}
+
+function BowelForm({ onSave, onClose }) {
+  const [bristol, setBristol] = React.useState(4);
+  const [urgency, setUrgency] = React.useState(0);
+  const [notes, setNotes] = React.useState('');
+
+  return (
+    <div className="stack">
+      <div className="field">
+        <div className="label">Bristol stool scale</div>
+        <div className="bristol-grid">
+          {[1,2,3,4,5,6,7].map((n) => (
+            <div
+              key={n}
+              className="bristol-cell"
+              data-on={bristol === n ? 'true' : 'false'}
+              onClick={() => setBristol(n)}
+            >
+              <div className="n">{n}</div>
+            </div>
+          ))}
+        </div>
+        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+          {bristolLabels[bristol]}
+        </div>
+      </div>
+
+      <div className="field">
+        <div className="label">Urgency</div>
+        <div className="chips">
+          {[
+            [0, 'None'],
+            [1, 'Mild'],
+            [2, 'Strong'],
+            [3, 'Rushed'],
+          ].map(([v, l]) => (
+            <Chip key={v} on={urgency === v} onClick={() => setUrgency(v)}>{l}</Chip>
+          ))}
+        </div>
+      </div>
+
+      <div className="field">
+        <div className="label">Notes (optional)</div>
+        <textarea
+          className="textarea"
+          placeholder="Anything unusual?"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      <button className="btn btn-primary btn-block" onClick={() => { onSave({ kind: 'bowel', bristol, urgency, notes: notes.trim() }); onClose(); }}>
+        Save entry
+      </button>
+    </div>
+  );
+}
+
+const SYMPTOM_TYPES = [
+  ['bloat', 'Bloating'],
+  ['gas', 'Gas'],
+  ['pain', 'Pain'],
+  ['cramps', 'Cramps'],
+  ['nausea', 'Nausea'],
+  ['heartburn', 'Heartburn'],
+];
+
+function SymptomForm({ onSave, onClose }) {
+  const [type, setType] = React.useState('bloat');
+  const [severity, setSeverity] = React.useState(2);
+  const [notes, setNotes] = React.useState('');
+
+  return (
+    <div className="stack">
+      <div className="field">
+        <div className="label">Symptom</div>
+        <div className="chips">
+          {SYMPTOM_TYPES.map(([v, l]) => (
+            <Chip key={v} on={type === v} onClick={() => setType(v)}>{l}</Chip>
+          ))}
+        </div>
+      </div>
+
+      <div className="field">
+        <div className="label">Severity</div>
+        <div className="severity-grid">
+          {[1,2,3,4,5].map((n) => (
+            <div key={n} className="severity-cell" data-on={severity === n ? 'true' : 'false'} onClick={() => setSeverity(n)}>
+              {'·'.repeat(n)}
+            </div>
+          ))}
+        </div>
+        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+          {['Barely noticeable', 'Mild', 'Moderate', 'Strong', 'Severe'][severity-1]}
+        </div>
+      </div>
+
+      <div className="field">
+        <div className="label">Notes (optional)</div>
+        <textarea
+          className="textarea"
+          placeholder="When did it start? How long?"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      <button className="btn btn-primary btn-block" onClick={() => { onSave({ kind: 'symptom', type, severity, notes: notes.trim() }); onClose(); }}>
+        Save symptom
+      </button>
+    </div>
+  );
+}
+
+Object.assign(window, { AddSheet, FoodForm, BowelForm, SymptomForm });
+</script>
+
+<!-- views/insights.jsx -->
+<script type="text/babel">
+const WINDOW_HOURS = 24;
+const ROUGH_BRISTOL = new Set([1, 2, 6, 7]);
+
+function eventInWindow(eventsAsc, fromTs, windowMs) {
+  for (let i = 0; i < eventsAsc.length; i++) {
+    const e = eventsAsc[i];
+    if (e < fromTs) continue;
+    if (e <= fromTs + windowMs) return true;
+    return false;
+  }
+  return false;
+}
+
+function computeInsights(entries) {
+  const now = Date.now();
+  const dayMs = 86400000;
+
+  const foods = entries.filter((e) => e.kind === 'food');
+  const bowels = entries.filter((e) => e.kind === 'bowel');
+  const symptoms = entries.filter((e) => e.kind === 'symptom');
+
+  const daysSet = new Set(entries.map((e) => window.GutUtil.fmtDateKey(e.ts)));
+  const daysCovered = daysSet.size;
+
+  const events = [
+    ...bowels.filter((b) => ROUGH_BRISTOL.has(b.bristol)).map((b) => b.ts),
+    ...symptoms.map((s) => s.ts),
+  ].sort((a, b) => a - b);
+
+  const eventCount = events.length;
+
+  let baseHits = 0;
+  for (const f of foods) {
+    if (eventInWindow(events, f.ts, WINDOW_HOURS * 3600000)) baseHits++;
+  }
+  const baseline = foods.length ? baseHits / foods.length : 0;
+
+  const byName = new Map();
+  for (const f of foods) {
+    for (const raw of (f.names || [])) {
+      const n = window.GutUtil.normalizeFood(raw);
+      if (!n) continue;
+      if (!byName.has(n)) byName.set(n, { exposures: 0, hits: 0 });
+      const stat = byName.get(n);
+      stat.exposures++;
+      if (eventInWindow(events, f.ts, WINDOW_HOURS * 3600000)) stat.hits++;
+    }
+  }
+
+  const suspects = [];
+  for (const [name, s] of byName.entries()) {
+    if (s.exposures < 2) continue;
+    const rateAfter = s.hits / s.exposures;
+    const lift = baseline > 0 ? rateAfter / baseline : (rateAfter > 0 ? Infinity : 0);
+    if (!isFinite(lift) || lift < 0.9) continue;
+    suspects.push({ name, exposures: s.exposures, hitCount: s.hits, rateAfter, baseline, lift });
+  }
+  suspects.sort((a, b) => b.lift - a.lift || b.exposures - a.exposures);
+
+  const cutoff = now - 14 * dayMs;
+  const recentBowels = bowels.filter((b) => b.ts >= cutoff);
+  const counts = {};
+  let sum = 0;
+  for (const b of recentBowels) {
+    counts[b.bristol] = (counts[b.bristol] || 0) + 1;
+    sum += b.bristol;
+  }
+  const total = recentBowels.length;
+  const avg = total ? sum / total : 0;
+  const ideal = (counts[3] || 0) + (counts[4] || 0);
+  const idealPct = total ? Math.round((ideal / total) * 100) : 0;
+  const maxCount = Math.max(1, ...Object.values(counts));
+
+  return {
+    daysCovered,
+    foodCount: foods.length,
+    eventCount,
+    baseline,
+    suspects,
+    bristolStats: { counts, total, avg, idealPct, maxCount, perDay: total / 14 },
+  };
+}
+
+function InsightsView({ state }) {
+  const insights = React.useMemo(() => computeInsights(state.entries), [state.entries]);
+  const [sharing, setSharing] = React.useState(false);
+
+  const handleShare = async () => {
+    setSharing(true);
+    const html = window.GutShare.generateInsightsHTML(state.entries);
+    const date = new Date().toISOString().slice(0,10);
+    await window.GutShare.shareContent(html, `gut-insights-${date}.html`, 'My Gut Health Insights');
+    setSharing(false);
+  };
+
+  const days = insights.daysCovered;
+  const enoughData = days >= 3 && insights.foodCount >= 5;
+
+  return (
+    <div className="stack">
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn btn-sm" onClick={handleShare} disabled={sharing}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          {sharing ? 'Preparing…' : 'Share'}
+        </button>
+      </div>
+      <div className="card">
+        <div className="card-title">Tracking summary</div>
+        <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+          <div>
+            <div className="serif" style={{ fontSize: 26, lineHeight: 1 }}>{days}</div>
+            <div className="muted" style={{ fontSize: 12 }}>days of data</div>
+          </div>
+          <div>
+            <div className="serif" style={{ fontSize: 26, lineHeight: 1 }}>{insights.foodCount}</div>
+            <div className="muted" style={{ fontSize: 12 }}>meals logged</div>
+          </div>
+          <div>
+            <div className="serif" style={{ fontSize: 26, lineHeight: 1 }}>{insights.eventCount}</div>
+            <div className="muted" style={{ fontSize: 12 }}>gut events</div>
+          </div>
+        </div>
+        {!enoughData && (
+          <div className="muted" style={{ fontSize: 13, marginTop: 12 }}>
+            Keep logging — meaningful patterns usually need at least 2 weeks of data. The
+            ranking below will get more accurate as it grows.
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Possible trigger foods</div>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+          Foods that were followed by a gut event (symptom or rough bowel movement) within{' '}
+          {WINDOW_HOURS}h, relative to your baseline rate.
+        </div>
+        {insights.suspects.length === 0 ? (
+          <EmptyState
+            glyph="◯"
+            title="No clear suspects yet"
+            sub="Either no gut events logged, or no food shows a stronger-than-baseline link"
+          />
+        ) : (
+          insights.suspects.slice(0, 12).map((s) => {
+            const pct = Math.min(100, Math.round(s.lift * 50));
+            const barCls = s.lift >= 2 ? 'bar danger' : s.lift >= 1.4 ? 'bar warn' : 'bar';
+            return (
+              <div key={s.name} className="insight-row">
+                <div className="insight-name">
+                  <div className="name">{s.name}</div>
+                  <div className="score mono">{s.lift.toFixed(1)}× baseline</div>
+                </div>
+                <div className={barCls}><span style={{ width: pct + '%' }} /></div>
+                <div className="insight-meta">
+                  <span>{s.hitCount}/{s.exposures} meals followed by event</span>
+                  <span className="mono">{Math.round(s.rateAfter * 100)}% vs {Math.round(s.baseline * 100)}%</span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Bowel patterns (last 14d)</div>
+        {insights.bristolStats.total === 0 ? (
+          <div className="muted" style={{ fontSize: 13 }}>No bowel entries in the last 2 weeks.</div>
+        ) : (
+          <>
+            <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+              <div>
+                <div className="serif" style={{ fontSize: 24, lineHeight: 1 }}>{insights.bristolStats.avg.toFixed(1)}</div>
+                <div className="muted" style={{ fontSize: 12 }}>avg type</div>
+              </div>
+              <div>
+                <div className="serif" style={{ fontSize: 24, lineHeight: 1 }}>{insights.bristolStats.perDay.toFixed(1)}</div>
+                <div className="muted" style={{ fontSize: 12 }}>per day</div>
+              </div>
+              <div>
+                <div className="serif" style={{ fontSize: 24, lineHeight: 1 }}>{insights.bristolStats.idealPct}%</div>
+                <div className="muted" style={{ fontSize: 12 }}>ideal (type 3-4)</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 4, alignItems: 'flex-end', height: 60 }}>
+              {[1,2,3,4,5,6,7].map((n) => {
+                const c = insights.bristolStats.counts[n] || 0;
+                const h = insights.bristolStats.total ? Math.max(4, (c / insights.bristolStats.maxCount) * 56) : 4;
+                const isIdeal = n === 3 || n === 4;
+                return (
+                  <div key={n} style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{
+                      height: h,
+                      background: isIdeal ? 'var(--accent)' : 'var(--line-2)',
+                      borderRadius: 6,
+                      transition: 'height .2s',
+                    }} />
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{n}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Method</div>
+        <div className="soft" style={{ fontSize: 13 }}>
+          For each food you've eaten, we check how often a symptom or rough bowel movement
+          (Bristol 1, 2, 6, or 7) follows within {WINDOW_HOURS} hours. We compare that to
+          your baseline rate across all {WINDOW_HOURS}h windows. <strong>Lift</strong> is the
+          ratio. A lift of 2× means "twice as likely" — but with sparse data, treat all of
+          this as a hint, not a diagnosis.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+window.InsightsView = InsightsView;
+window.computeInsights = computeInsights;
+</script>
+
+<!-- views/history.jsx -->
+<script type="text/babel">
+function HistoryView({ state, onDelete }) {
+  const { groupByDay } = window.GutUtil;
+  const groups = groupByDay(state.entries);
+  const [sharing, setSharing] = React.useState(false);
+
+  const handleShare = async () => {
+    setSharing(true);
+    const html = window.GutShare.generateHistoryHTML(state.entries);
+    const date = new Date().toISOString().slice(0,10);
+    await window.GutShare.shareContent(html, `gut-history-${date}.html`, 'My Gut Health History');
+    setSharing(false);
+  };
+
+  if (state.entries.length === 0) {
+    return (
+      <EmptyState
+        glyph="∅"
+        title="No history yet"
+        sub="Logged meals and bowel movements will appear here"
+      />
+    );
+  }
+
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 4 }}>
+        <button className="btn btn-sm" onClick={handleShare} disabled={sharing}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          {sharing ? 'Preparing…' : 'Share'}
+        </button>
+      </div>
+      {groups.map((g) => (
+        <div key={g.key}>
+          <div className="day-head">{g.label}</div>
+          <div className="card">
+            {g.items.map((e) => (
+              <EntryRow key={e.id} entry={e} onDelete={onDelete} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+window.HistoryView = HistoryView;
+</script>
+
+<!-- share.jsx -->
+<script type="text/babel">
+const SHARE_CSS = `
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',system-ui,sans-serif;background:#f7f5f0;color:#2a2520;font-size:15px;line-height:1.45;padding:24px 16px 60px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto}
+  h1{font-family:'Instrument Serif',Georgia,serif;font-size:30px;font-weight:400;margin-bottom:4px}
+  .sub{font-size:13px;color:#888;margin-bottom:24px}
+  .day-head{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#999;font-weight:600;padding:16px 0 6px}
+  .card{background:#fff;border:1px solid #e8e4de;border-radius:14px;padding:4px 14px;margin-bottom:8px}
+  .entry{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid #f0ece6}
+  .entry:last-child{border-bottom:0}
+  .time{font-size:12px;color:#999;width:52px;flex-shrink:0;padding-top:2px;font-variant-numeric:tabular-nums}
+  .dot{width:8px;height:8px;border-radius:50%;margin-top:7px;flex-shrink:0}
+  .dot-food{background:#c97a2a}.dot-bowel{background:#5a9a6a}.dot-symp{background:#c05040}
+  .body{flex:1;min-width:0}
+  .title{font-weight:500;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .meta{font-size:12px;color:#999;margin-top:2px}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:#eef5ee;color:#3a7a4a;letter-spacing:.02em;font-family:monospace}
+  .tag-warn{background:#fef3e8;color:#b05800}
+  .tag-danger{background:#fdecea;color:#b03020}
+  .section{background:#fff;border:1px solid #e8e4de;border-radius:14px;padding:14px 16px;margin-bottom:10px}
+  .section-title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#999;font-weight:600;margin-bottom:10px}
+  .stat-row{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px}
+  .stat .v{font-family:'Instrument Serif',Georgia,serif;font-size:26px;line-height:1}
+  .stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#999;margin-top:2px}
+  .insight-row{padding:10px 0;border-bottom:1px solid #f0ece6}
+  .insight-row:last-child{border-bottom:0}
+  .insight-name{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .insight-name .name{font-weight:500;font-size:14px}
+  .insight-name .score{font-size:11px;color:#999;font-family:monospace}
+  .bar{height:6px;background:#eee;border-radius:999px;overflow:hidden;margin-bottom:4px}
+  .bar-fill{height:100%;border-radius:999px;background:#2a2520}
+  .bar-fill-warn{background:#b05800}.bar-fill-danger{background:#b03020}
+  .insight-meta{font-size:11px;color:#999;display:flex;gap:10px}
+  .bristol-bar{display:flex;gap:4px;align-items:flex-end;height:56px;margin-top:12px}
+  .bristol-bar-col{flex:1;text-align:center}
+  .bristol-bar-col .block{border-radius:5px}
+  .bristol-bar-col .label{font-size:10px;color:#999;margin-top:3px;font-family:monospace}
+  .empty{padding:30px;text-align:center;color:#999;border:1px dashed #ddd;border-radius:14px}
+  .footer{text-align:center;font-size:12px;color:#bbb;margin-top:32px}
+`;
+
+function fmtTimeShare(ts) {
+  const d = new Date(ts);
+  const h = d.getHours(), m = d.getMinutes();
+  const ampm = h >= 12 ? 'pm' : 'am';
+  return `${((h+11)%12)+1}:${String(m).padStart(2,'0')}${ampm}`;
+}
+
+function generateHistoryHTML(entries) {
+  const { groupByDay, fmtDateKey } = window.GutUtil;
+  const groups = groupByDay(entries);
+
+  const bristolDesc = {1:'Hard lumps',2:'Lumpy sausage',3:'Sausage with cracks',4:'Smooth, soft — ideal',5:'Soft blobs',6:'Mushy',7:'Liquid'};
+  const cap = s => s ? s[0].toUpperCase()+s.slice(1) : s;
+
+  const entryHTML = (e) => {
+    let dotCls, titleHTML, metaHTML = '';
+    if (e.kind === 'food') {
+      dotCls = 'dot-food';
+      titleHTML = (e.names||[]).join(', ') || 'Meal';
+      if (e.notes) metaHTML = `<div class="meta">${e.notes}</div>`;
+    } else if (e.kind === 'bowel') {
+      dotCls = 'dot-bowel';
+      const desc = bristolDesc[e.bristol] || `Type ${e.bristol}`;
+      titleHTML = `Bowel movement <span class="tag">type ${e.bristol}</span>`;
+      const urg = e.urgency ? ` · urgency ${'·'.repeat(e.urgency)}` : '';
+      metaHTML = `<div class="meta">${desc}${urg}${e.notes ? ' · '+e.notes : ''}</div>`;
+    } else {
+      dotCls = 'dot-symp';
+      const sevCls = e.severity >= 4 ? 'tag-danger' : e.severity >= 3 ? 'tag-warn' : '';
+      titleHTML = `${cap(e.type)} <span class="tag ${sevCls}">${'·'.repeat(e.severity)}</span>`;
+      if (e.notes) metaHTML = `<div class="meta">${e.notes}</div>`;
+    }
+    return `<div class="entry"><div class="time">${fmtTimeShare(e.ts)}</div><div class="dot ${dotCls}"></div><div class="body"><div class="title">${titleHTML}</div>${metaHTML}</div></div>`;
+  };
+
+  const bodyHTML = groups.length === 0
+    ? `<div class="empty">No entries logged yet.</div>`
+    : groups.map(g => `<div class="day-head">${g.label}</div><div class="card">${g.items.map(entryHTML).join('')}</div>`).join('');
+
+  const date = new Date().toLocaleDateString(undefined, {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Gut — History</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Instrument+Serif&display=swap" rel="stylesheet"/><style>${SHARE_CSS}</style></head><body><div class="wrap"><h1>Gut — History</h1><div class="sub">Exported ${date} · ${entries.length} entries</div>${bodyHTML}<div class="footer">Shared from Gut health tracker · data is read-only</div></div></body></html>`;
+}
+
+function generateInsightsHTML(entries) {
+  const insights = window.computeInsights ? window.computeInsights(entries) : null;
+  if (!insights) return null;
+
+  const date = new Date().toLocaleDateString(undefined, {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  const suspectsHTML = insights.suspects.length === 0
+    ? `<div class="empty">No clear suspects yet — keep logging for a few weeks.</div>`
+    : insights.suspects.slice(0,12).map(s => {
+        const pct = Math.min(100, Math.round(s.lift * 50));
+        const fillCls = s.lift >= 2 ? 'bar-fill-danger' : s.lift >= 1.4 ? 'bar-fill-warn' : '';
+        return `<div class="insight-row"><div class="insight-name"><span class="name">${s.name}</span><span class="score">${s.lift.toFixed(1)}× baseline</span></div><div class="bar"><div class="bar-fill ${fillCls}" style="width:${pct}%"></div></div><div class="insight-meta"><span>${s.hitCount}/${s.exposures} meals followed by event</span><span>${Math.round(s.rateAfter*100)}% vs ${Math.round(s.baseline*100)}%</span></div></div>`;
+      }).join('');
+
+  const bs = insights.bristolStats;
+  const bristolBarsHTML = bs.total === 0 ? '<p style="color:#999;font-size:13px">No bowel entries in the last 2 weeks.</p>'
+    : `<div class="stat-row">${[
+        {v: bs.avg.toFixed(1), k:'avg type'},
+        {v: bs.perDay.toFixed(1), k:'per day'},
+        {v: bs.idealPct+'%', k:'ideal (3–4)'},
+      ].map(x=>`<div class="stat"><div class="v">${x.v}</div><div class="k">${x.k}</div></div>`).join('')}</div>
+      <div class="bristol-bar">${[1,2,3,4,5,6,7].map(n=>{
+        const c = bs.counts[n]||0;
+        const h = bs.total ? Math.max(4,(c/bs.maxCount)*52) : 4;
+        const col = (n===3||n===4) ? '#5a9a6a' : '#ddd';
+        return `<div class="bristol-bar-col"><div class="block" style="height:${h}px;background:${col}"></div><div class="label">${n}</div></div>`;
+      }).join('')}</div>`;
+
+  const bodyHTML = `
+    <div class="section"><div class="section-title">Summary</div>
+      <div class="stat-row">
+        <div class="stat"><div class="v">${insights.daysCovered}</div><div class="k">Days tracked</div></div>
+        <div class="stat"><div class="v">${insights.foodCount}</div><div class="k">Meals logged</div></div>
+        <div class="stat"><div class="v">${insights.eventCount}</div><div class="k">Gut events</div></div>
+      </div>
+    </div>
+    <div class="section"><div class="section-title">Possible trigger foods</div><p style="font-size:13px;color:#999;margin-bottom:10px">Foods followed by a gut event within 24h, vs your baseline rate.</p>${suspectsHTML}</div>
+    <div class="section"><div class="section-title">Bowel patterns (last 14 days)</div>${bristolBarsHTML}</div>
+    <div class="section"><div class="section-title">How this works</div><p style="font-size:13px;color:#777;line-height:1.6">For each food, we check how often a symptom or rough bowel movement (Bristol 1, 2, 6, or 7) follows within 24 hours. <strong>Lift</strong> is that rate divided by your overall baseline rate. A lift of 2× means twice as likely. Treat this as a hint to discuss with a healthcare provider, not a diagnosis.</p></div>`;
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Gut — Insights</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Instrument+Serif&display=swap" rel="stylesheet"/><style>${SHARE_CSS}</style></head><body><div class="wrap"><h1>Gut — Insights</h1><div class="sub">Exported ${date}</div>${bodyHTML}<div class="footer">Shared from Gut health tracker · data is read-only</div></div></body></html>`;
+}
+
+async function shareContent(html, filename, title) {
+  const blob = new Blob([html], { type: 'text/html' });
+  const file = new File([blob], filename, { type: 'text/html' });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  // Fallback: download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+window.GutShare = { generateHistoryHTML, generateInsightsHTML, shareContent };
+</script>
+
+<!-- app.jsx -->
+<script type="text/babel">
+function App() {
+  const { state, addEntry, deleteEntry, clearAll, seedDemo } = window.GutStore.useStore();
+  const [tab, setTab] = React.useState('today');
+  const [addKind, setAddKind] = React.useState(null);
+  const [menuOpen, setMenuOpen] = React.useState(false);
+
+  const today = new Date();
+  const dateLabel = today.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <h1>Gut</h1>
+        <div className="row" style={{ gap: 8 }}>
+          <div className="date">{dateLabel}</div>
+          <button className="btn btn-sm btn-ghost" onClick={() => setMenuOpen((v) => !v)} aria-label="Menu">⋯</button>
+        </div>
+      </header>
+
+      {menuOpen && (
+        <div className="card" style={{ margin: '0 22px 10px' }}>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" onClick={() => { seedDemo(); setMenuOpen(false); }}>Load demo data</button>
+            <button className="btn btn-sm" onClick={() => { exportJson(state); setMenuOpen(false); }}>Export JSON</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => { clearAll(); setMenuOpen(false); }}>Erase all</button>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            All data lives locally in your browser. Nothing is uploaded.
+          </div>
+        </div>
+      )}
+
+      <main data-screen-label={`Gut · ${tab}`}>
+        {tab === 'today' && (
+          <TodayView state={state} onAdd={setAddKind} onDelete={deleteEntry} />
+        )}
+        {tab === 'history' && (
+          <HistoryView state={state} onDelete={deleteEntry} />
+        )}
+        {tab === 'insights' && (
+          <InsightsView state={state} />
+        )}
+        {tab === 'add' && (
+          <AddPicker onPick={(k) => { setAddKind(k); setTab('today'); }} />
+        )}
+
+        <div className="footer-hint">
+          {state.entries.length} entries · stored locally
+        </div>
+      </main>
+
+      <nav className="tabs">
+        <button className="tab" data-active={tab === 'today'} onClick={() => setTab('today')}>Today</button>
+        <button className="tab" data-active={tab === 'history'} onClick={() => setTab('history')}>History</button>
+        <button className="tab" data-active={tab === 'insights'} onClick={() => setTab('insights')}>Insights</button>
+        <button className="tab" data-active={tab === 'add'} onClick={() => setTab('add')}>Add</button>
+      </nav>
+
+      <AddSheet kind={addKind} onClose={() => setAddKind(null)} onSave={addEntry} />
+    </div>
+  );
+}
+
+function AddPicker({ onPick }) {
+  return (
+    <div className="stack">
+      <div className="serif" style={{ fontSize: 22, marginTop: 4 }}>What did you want to log?</div>
+      <button className="btn btn-block btn-accent" onClick={() => onPick('food')} style={{ padding: 18, justifyContent: 'flex-start' }}>
+        <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 28 }}>◇</span>
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontWeight: 600 }}>A meal or snack</div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>Snap a photo or type it in</div>
+        </div>
+      </button>
+      <button className="btn btn-block" onClick={() => onPick('bowel')} style={{ padding: 18, justifyContent: 'flex-start' }}>
+        <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 28 }}>○</span>
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontWeight: 600 }}>A bowel movement</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Bristol type, urgency, notes</div>
+        </div>
+      </button>
+      <button className="btn btn-block" onClick={() => onPick('symptom')} style={{ padding: 18, justifyContent: 'flex-start' }}>
+        <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 28 }}>△</span>
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontWeight: 600 }}>A symptom</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Bloat, gas, pain, etc.</div>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function exportJson(state) {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `gut-export-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
