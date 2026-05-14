@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Mr Onigiri @ Funan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; background: #F6F1E9; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #1A1612;
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px;
+  line-height: 1.45;
+  overscroll-behavior-y: none;
+}
+button { font-family: inherit; cursor: pointer; }
+input  { font-family: inherit; color: #1A1612; }
+::-webkit-scrollbar { display: none; }
+* { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.slide-up { animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.fade-in  { animation: fadeIn  0.2s ease; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ─── PAYNOW SGQR BUILDER ──────────────────────────────────────────────────────
+function crc16(str) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+      crc &= 0xFFFF;
+    }
+  }
+  return crc;
+}
+
+function buildPayNowQR(mobile, amount) {
+  const f = (id, val) => `${id}${String(val.length).padStart(2,'0')}${val}`;
+  const mai = f('00','SG.PAYNOW') + f('01','0') + f('02', mobile) + f('03','0');
+  const body = [
+    f('00','01'),
+    f('01','12'),
+    f('26', mai),
+    f('52','0000'),
+    f('53','702'),
+    f('54', amount.toFixed(2)),
+    f('58','SG'),
+    f('59','Mr Onigiri'),
+    f('60','Singapore'),
+    '6304',
+  ].join('');
+  const checksum = crc16(body).toString(16).toUpperCase().padStart(4,'0');
+  return body.slice(0,-4) + '6304' + checksum;
+}
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const WHATSAPP_NUMBER  = '6590705241';
+const SET_PRICE        = 11.90;
+const UPGRADE_PRICE    = 4.90;
+const UPGRADE_DRINKS   = ['Lemon Tea (Iced)', 'Lemon Tea (Hot)'];
+const UPGRADE_SIDES    = ['Curly Fries', 'Tater Tots'];
+const ADS_DRINKS       = ['Lemon Tea (Iced)', 'Lemon Tea (Hot)', 'Coke Zero'];
+const ADS_SIDES        = ['Curly Fries', 'Tater Tots'];
+const ADS_OPTIONS      = [
+  { id: 'A', name: 'Crispy Chicken' },
+  { id: 'B', name: 'Golden Scallop' },
+  { id: 'C', name: 'Double Cheese' },
+  { id: 'D', name: 'Ebiko Kani Kama' },
+];
+
+const ONIGIRI = [
+  { id:'o1',  name:'Beefy Kimchi',                          price:9.50, badge:'bestSeller', img:'item_images/img_o1.png'  },
+  { id:'o2',  name:'Yakitori',                              price:9.50,                     img:'item_images/img_o2.png'  },
+  { id:'o3',  name:'Signature Melted Cheesy Crispy Chicken',price:7.50, badge:'signature',  img:'item_images/img_o3.png'  },
+  { id:'o4',  name:'Double Yummy Double Ebi',               price:7.50,                     img:'item_images/img_o4.png'  },
+  { id:'o5',  name:'Crispy Golden Scallop',                 price:7.50,                     img:'item_images/img_o5.png'  },
+  { id:'o6',  name:'Ebiko Kani Kama',                       price:7.50, badge:'signature',  img:'item_images/img_o6.png'  },
+  { id:'o7',  name:'Smoked Salmon',                         price:8.50,                     img:'item_images/img_o7.png'  },
+  { id:'o8',  name:'Otakotak',                              price:8.50,                     img:'item_images/img_o8.png'  },
+  { id:'o9',  name:'Spam (Okinawa Classic)',                price:5.50,                     img:'item_images/img_o9.png'  },
+  { id:'o10', name:'Teriyaki Fried Tofu',                   price:6.50, badge:'vegetarian', img:'item_images/img_o10.png' },
+  { id:'o11', name:'Double Cheese',                         price:7.00,                     img:'item_images/img_o11.png' },
+  { id:'o12', name:'Cheesy Tuna Island',                    price:6.50, badge:'vegAvail',   img:'item_images/img_o12.png' },
+];
+
+const FINGER_FOOD = [
+  { id:'ff1', name:'Chicken Karaage', price:5.90, desc:'5–6 pcs', img:'item_images/img_ff1.png' },
+  { id:'ff2', name:'Ebi Tempura',     price:4.90, desc:'3 pcs',   img:'item_images/img_ff2.png' },
+  { id:'ff3', name:'Cheese Finger',   price:5.90, desc:'4 pcs',   img:'item_images/img_ff3.png' },
+  { id:'ff4', name:'Curly Fries',     price:5.90,                  img:'item_images/img_ff4.png' },
+  { id:'ff5', name:'Tater Tots',      price:5.90,                  img:'item_images/img_ff5.png' },
+];
+
+const BEVERAGES = [
+  { id:'bv1', name:'Coke Zero',        price:3.00, img:'item_images/img_bv23.png' },
+  { id:'bv2', name:'Lemon Tea (Iced)', price:3.00, img:'item_images/img_bv23.png' },
+  { id:'bv3', name:'Lemon Tea (Hot)',  price:3.00, img:'item_images/img_bv23.png' },
+];
+
+const TABS = [
+  { id:'allDaySaver', label:'All Day Saver' },
+  { id:'onigiri',     label:'Onigiri'       },
+  { id:'fingerFood',  label:'Finger Food'   },
+  { id:'beverages',   label:'Beverages'     },
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const fmt = (n) => `$${n.toFixed(2)}`;
+
+const BADGE_CONFIG = {
+  bestSeller: { bg:'#FFF0E8', color:'#C4622D', label:'Best Seller'   },
+  signature:  { bg:'#EEF2FF', color:'#3A5BC0', label:'Signature'     },
+  vegetarian: { bg:'#EDFAF3', color:'#1E7A47', label:'Vegetarian'    },
+  vegAvail:   { bg:'#EDFAF3', color:'#1E7A47', label:'Veg. available' },
+};
+
+function Badge({ type }) {
+  const c = BADGE_CONFIG[type];
+  if (!c) return null;
+  return (
+    <span style={{
+      display:'inline-block', fontSize:10, fontWeight:700,
+      padding:'2px 7px', borderRadius:999,
+      background:c.bg, color:c.color, letterSpacing:'0.01em',
+    }}>{c.label}</span>
+  );
+}
+
+function Img({ src, alt, style }) {
+  const [err, setErr] = useState(false);
+  if (err) return <div style={{ width:'100%', height:'100%', background:'#F0EDE6', ...style }} />;
+  return (
+    <img
+      src={src} alt={alt}
+      onError={() => setErr(true)}
+      style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', ...style }}
+    />
+  );
+}
+
+// ─── BOTTOM SHEET ─────────────────────────────────────────────────────────────
+function BottomSheet({ open, onClose, children }) {
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div
+      className="fade-in"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position:'fixed', inset:0, zIndex:200,
+        background:'rgba(26,22,18,0.5)',
+        display:'flex', alignItems:'flex-end',
+      }}
+    >
+      <div
+        className="slide-up"
+        style={{
+          width:'100%', maxWidth:430, margin:'0 auto',
+          background:'#F6F1E9',
+          borderRadius:'20px 20px 0 0',
+          maxHeight:'90vh', overflowY:'auto',
+          paddingBottom:'env(safe-area-inset-bottom, 16px)',
+        }}
+      >
+        <div style={{ display:'flex', justifyContent:'center', padding:'12px 0 4px' }}>
+          <div style={{ width:40, height:4, borderRadius:999, background:'#E0D8CE' }} />
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── PILL OPTION ──────────────────────────────────────────────────────────────
+function Pill({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding:'6px 13px', borderRadius:999, fontSize:13, fontWeight:500,
+        border:`1.5px solid ${active ? '#4c612c' : '#E0D8CE'}`,
+        background: active ? '#4c612c' : '#F6F1E9',
+        color:      active ? '#F6F1E9' : '#1A1612',
+        cursor:'pointer', transition:'all .12s',
+        whiteSpace:'nowrap',
+      }}
+    >{children}</button>
+  );
+}
+
+// ─── QTY STEPPER ──────────────────────────────────────────────────────────────
+function Stepper({ value, onChange, min = 1 }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', border:'1.5px solid #EDE6DA', borderRadius:10, overflow:'hidden', flexShrink:0 }}>
+      <button
+        onClick={() => onChange(Math.max(min, value - 1))}
+        style={{ width:40, height:44, background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#1A1612' }}
+      >−</button>
+      <span style={{ width:32, textAlign:'center', fontWeight:700, fontSize:15 }}>{value}</span>
+      <button
+        onClick={() => onChange(value + 1)}
+        style={{ width:40, height:44, background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#1A1612' }}
+      >+</button>
+    </div>
+  );
+}
+
+// ─── QUICK ADD CONTROL (inline +/−) ──────────────────────────────────────────
+function QuickAdd({ count, onAdd, onRemove }) {
+  if (count === 0) {
+    return (
+      <button
+        onClick={onAdd}
+        style={{
+          width:32, height:32, borderRadius:999, flexShrink:0,
+          background:'#4c612c', color:'#F6F1E9', border:'none',
+          fontSize:20, display:'flex', alignItems:'center', justifyContent:'center',
+          cursor:'pointer', lineHeight:1,
+        }}
+      >+</button>
+    );
+  }
+  return (
+    <div style={{ display:'flex', alignItems:'center', flexShrink:0 }}>
+      <button
+        onClick={onRemove}
+        style={{
+          width:28, height:28, borderRadius:999, background:'#F6F1E9',
+          border:'1.5px solid #EDE6DA', fontSize:16, cursor:'pointer', color:'#1A1612',
+          display:'flex', alignItems:'center', justifyContent:'center',
+        }}
+      >−</button>
+      <span style={{ width:26, textAlign:'center', fontWeight:700, fontSize:13 }}>{count}</span>
+      <button
+        onClick={onAdd}
+        style={{
+          width:28, height:28, borderRadius:999, background:'#4c612c', color:'#F6F1E9',
+          border:'none', fontSize:16, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center',
+        }}
+      >+</button>
+    </div>
+  );
+}
+
+// ─── ITEM SHEET (Onigiri detail + optional set meal upgrade) ──────────────────
+function ItemSheet({ item, onAdd, onClose }) {
+  const [setMeal, setSetMeal] = useState(false);
+  const [drink,   setDrink  ] = useState(UPGRADE_DRINKS[0]);
+  const [side,    setSide   ] = useState(UPGRADE_SIDES[0]);
+  const [qty,     setQty    ] = useState(1);
+
+  if (!item) return null;
+
+  const unitPrice = item.price + (setMeal ? UPGRADE_PRICE : 0);
+  const total     = unitPrice * qty;
+  const cartKey   = setMeal ? `${item.id}_set_${drink}_${side}` : item.id;
+
+  const handleAdd = () => {
+    onAdd({ key:cartKey, name:item.name, price:unitPrice, qty, setMeal, drink:setMeal?drink:null, side:setMeal?side:null });
+    onClose();
+  };
+
+  return (
+    <div style={{ padding:'0 20px 28px' }}>
+      {/* Image */}
+      <div style={{ width:'100%', aspectRatio:'16/9', borderRadius:12, overflow:'hidden', marginBottom:14, background:'#F0EDE6' }}>
+        <Img src={item.img} alt={item.name} />
+      </div>
+
+      {/* Name + price */}
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, marginBottom:6 }}>
+        <div>
+          <div style={{ fontWeight:700, fontSize:17, marginBottom:5 }}>{item.name}</div>
+          {item.badge && <Badge type={item.badge} />}
+        </div>
+        <div style={{ fontWeight:700, fontSize:17, flexShrink:0 }}>{fmt(item.price)}</div>
+      </div>
+      <div style={{ fontSize:13, color:'#7A6D5E', marginBottom:14 }}>
+        Served with seaweed, seasoned rice, Tamagoyaki, Spam &amp; cucumber.
+      </div>
+
+      <div style={{ height:1, background:'#EDE6DA', margin:'0 0 14px' }} />
+
+      {/* Set meal upgrade */}
+      <div style={{ background:'#F8F5F0', border:'1px solid #EDE6DA', borderRadius:12, padding:'12px 14px', marginBottom:16 }}>
+        <button
+          onClick={() => setSetMeal(v => !v)}
+          style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', background:'none', border:'none', cursor:'pointer', padding:0 }}
+        >
+          <div style={{ textAlign:'left' }}>
+            <div style={{ fontWeight:600, fontSize:14 }}>Upgrade to Set Meal</div>
+            <div style={{ fontSize:12, color:'#7A6D5E', marginTop:2 }}>Add drink + side · +{fmt(UPGRADE_PRICE)}</div>
+          </div>
+          {/* Checkbox */}
+          <div style={{
+            width:22, height:22, borderRadius:6, flexShrink:0,
+            border:`2px solid ${setMeal ? '#4c612c' : '#E0D8CE'}`,
+            background: setMeal ? '#4c612c' : 'transparent',
+            display:'flex', alignItems:'center', justifyContent:'center',
+          }}>
+            {setMeal && (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
+        </button>
+
+        {setMeal && (
+          <div style={{ marginTop:14 }}>
+            <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:7 }}>DRINK</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}>
+              {UPGRADE_DRINKS.map(d => <Pill key={d} active={drink===d} onClick={() => setDrink(d)}>{d}</Pill>)}
+            </div>
+            <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:7 }}>SIDE</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {UPGRADE_SIDES.map(s => <Pill key={s} active={side===s} onClick={() => setSide(s)}>{s}</Pill>)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Qty + Add */}
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <Stepper value={qty} onChange={setQty} />
+        <button
+          onClick={handleAdd}
+          style={{
+            flex:1, height:44, background:'#4c612c', color:'#F6F1E9',
+            border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer',
+          }}
+        >Add to cart · {fmt(total)}</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── ALL DAY SAVER SHEET ──────────────────────────────────────────────────────
+function AllDaySaverSheet({ onAdd, onClose }) {
+  const [option, setOption] = useState('A');
+  const [drink,  setDrink ] = useState(ADS_DRINKS[0]);
+  const [side,   setSide  ] = useState(ADS_SIDES[0]);
+  const [qty,    setQty   ] = useState(1);
+
+  const selected = ADS_OPTIONS.find(o => o.id === option);
+  const total    = SET_PRICE * qty;
+  const cartKey  = `ads_${option}_${drink.replace(/\s/g,'')}_${side.replace(/\s/g,'')}`;
+
+  const handleAdd = () => {
+    onAdd({ key:cartKey, name:`All Day Saver — ${selected.name}`, price:SET_PRICE, qty, drink, side });
+    onClose();
+  };
+
+  return (
+    <div style={{ padding:'0 20px 28px' }}>
+      <div style={{ fontWeight:700, fontSize:18, marginBottom:4 }}>All Day Saver Set</div>
+      <div style={{ fontSize:13, color:'#7A6D5E', marginBottom:18 }}>
+        1 Onigiri + 1 Drink + 1 Side · {fmt(SET_PRICE)}
+      </div>
+
+      {/* Onigiri choice */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:8 }}>CHOOSE ONIGIRI</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {ADS_OPTIONS.map(o => (
+            <button
+              key={o.id}
+              onClick={() => setOption(o.id)}
+              style={{
+                display:'flex', alignItems:'center', justifyContent:'space-between',
+                padding:'10px 14px', borderRadius:10, textAlign:'left',
+                border:`1.5px solid ${option===o.id ? '#4c612c' : '#EDE6DA'}`,
+                background: option===o.id ? '#4c612c' : '#F8F5F0',
+                color:      option===o.id ? '#F6F1E9' : '#1A1612',
+                fontWeight:500, fontSize:14, cursor:'pointer',
+              }}
+            >
+              <span>{o.name}</span>
+              {option===o.id && (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8l4 4 6-6" stroke="#F6F1E9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Drink */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:8 }}>CHOOSE DRINK</div>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+          {ADS_DRINKS.map(d => <Pill key={d} active={drink===d} onClick={() => setDrink(d)}>{d}</Pill>)}
+        </div>
+      </div>
+
+      {/* Side */}
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:8 }}>CHOOSE SIDE</div>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+          {ADS_SIDES.map(s => <Pill key={s} active={side===s} onClick={() => setSide(s)}>{s}</Pill>)}
+        </div>
+      </div>
+
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <Stepper value={qty} onChange={setQty} />
+        <button
+          onClick={handleAdd}
+          style={{
+            flex:1, height:44, background:'#4c612c', color:'#F6F1E9',
+            border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer',
+          }}
+        >Add to cart · {fmt(total)}</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── CART SHEET ───────────────────────────────────────────────────────────────
+function CartSheet({ cart, onClose, onCheckout, onUpdateQty, onRemove }) {
+  const items    = Object.values(cart);
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+
+  if (items.length === 0) {
+    return (
+      <div style={{ padding:'32px 20px', textAlign:'center', color:'#7A6D5E' }}>
+        <div style={{ fontSize:44, marginBottom:10 }}>🍱</div>
+        <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>Your cart is empty</div>
+        <div style={{ fontSize:13 }}>Browse the menu and add something!</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding:'0 20px 28px' }}>
+      <div style={{ fontWeight:700, fontSize:18, marginBottom:14 }}>Your Order</div>
+
+      {items.map(item => (
+        <div key={item.key} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'11px 0', borderBottom:'1px solid #EDE6DA' }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontWeight:600, fontSize:14 }}>{item.name}</div>
+            {(item.drink || item.side) && (
+              <div style={{ fontSize:12, color:'#7A6D5E', marginTop:2 }}>
+                {[item.drink, item.side].filter(Boolean).join(' · ')}
+              </div>
+            )}
+            <div style={{ fontWeight:700, fontSize:13, marginTop:4 }}>{fmt(item.price)} each</div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', flexShrink:0 }}>
+            <button
+              onClick={() => item.qty <= 1 ? onRemove(item.key) : onUpdateQty(item.key, item.qty - 1)}
+              style={{ width:28, height:28, borderRadius:999, background:'#F6F1E9', border:'1.5px solid #EDE6DA', fontSize:16, cursor:'pointer', color:'#1A1612', display:'flex', alignItems:'center', justifyContent:'center' }}
+            >−</button>
+            <span style={{ width:28, textAlign:'center', fontWeight:700, fontSize:13 }}>{item.qty}</span>
+            <button
+              onClick={() => onUpdateQty(item.key, item.qty + 1)}
+              style={{ width:28, height:28, borderRadius:999, background:'#4c612c', color:'white', border:'none', fontSize:16, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+            >+</button>
+          </div>
+        </div>
+      ))}
+
+      {/* Summary box */}
+      <div style={{ background:'#F8F5F0', border:'1px solid #EDE6DA', borderRadius:10, padding:'12px 14px', marginTop:14, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <span style={{ fontWeight:600, fontSize:14 }}>Total</span>
+        <span style={{ fontWeight:800, fontSize:17 }}>{fmt(subtotal)}</span>
+      </div>
+
+      <button
+        onClick={onCheckout}
+        style={{ width:'100%', marginTop:12, height:48, background:'#4c612c', color:'white', border:'none', borderRadius:12, fontWeight:700, fontSize:16, cursor:'pointer' }}
+      >Proceed to Checkout</button>
+    </div>
+  );
+}
+
+// ─── CHECKOUT SHEET ───────────────────────────────────────────────────────────
+function CheckoutSheet({ cart, onConfirm }) {
+  const [name,  setName ] = useState('');
+  const [phone, setPhone] = useState('');
+
+  const items    = Object.values(cart);
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const valid    = name.trim().length >= 1 && phone.trim().length >= 8;
+
+  return (
+    <div style={{ padding:'0 20px 28px' }}>
+      <div style={{ fontWeight:700, fontSize:18, marginBottom:16 }}>Checkout</div>
+
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:6 }}>YOUR NAME *</div>
+        <input
+          value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Wei Ming"
+          style={{ width:'100%', border:'1.5px solid #EDE6DA', borderRadius:10, padding:'11px 14px', fontSize:15, background:'#F8F5F0', outline:'none' }}
+        />
+      </div>
+
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:6 }}>PHONE NUMBER *</div>
+        <input
+          value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. 9123 4567" type="tel"
+          style={{ width:'100%', border:`1.5px solid ${valid ? '#EDE6DA' : '#EDE6DA'}`, borderRadius:10, padding:'11px 14px', fontSize:15, background:'#F8F5F0', outline:'none' }}
+        />
+      </div>
+
+      {/* Order summary */}
+      <div style={{ background:'#F8F5F0', border:'1px solid #EDE6DA', borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
+        <div style={{ fontSize:11, color:'#7A6D5E', fontWeight:700, letterSpacing:'0.06em', marginBottom:8 }}>ORDER SUMMARY</div>
+        {items.map(item => (
+          <div key={item.key} style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:13 }}>
+            <span style={{ color:'#1A1612' }}>{item.qty}× {item.name}</span>
+            <span style={{ fontWeight:600 }}>{fmt(item.price * item.qty)}</span>
+          </div>
+        ))}
+        <div style={{ borderTop:'1px solid #EDE6DA', marginTop:8, paddingTop:8, display:'flex', justifyContent:'space-between' }}>
+          <span style={{ fontWeight:700 }}>Total</span>
+          <span style={{ fontWeight:800 }}>{fmt(subtotal)}</span>
+        </div>
+      </div>
+
+      {/* PayNow box */}
+      <div style={{ background:'#F0FBF5', border:'1px solid #C5E8D4', borderRadius:10, padding:'11px 14px', marginBottom:16 }}>
+        <div style={{ fontWeight:700, color:'#1E7A47', fontSize:13, marginBottom:3 }}>Payment via PayNow</div>
+        <div style={{ fontSize:13, color:'#1A1612', marginBottom:3 }}>PayNow to <strong>90705241</strong></div>
+        <div style={{ fontSize:12, color:'#7A6D5E' }}>Send your PayNow screenshot to WhatsApp after ordering.</div>
+      </div>
+
+      <button
+        disabled={!valid}
+        onClick={() => onConfirm({ name: name.trim(), phone: phone.trim() })}
+        style={{
+          width:'100%', height:50,
+          background: valid ? '#4c612c' : '#E0D8CE',
+          color:      valid ? 'white'   : '#7A6D5E',
+          border:'none', borderRadius:12, fontWeight:700, fontSize:15,
+          cursor: valid ? 'pointer' : 'default',
+          transition:'background .15s',
+        }}
+      >
+        Generate PayNow QR →
+      </button>
+    </div>
+  );
+}
+
+// ─── PAYNOW QR SHEET ─────────────────────────────────────────────────────────
+function PayNowQRSheet({ amount, onSendWhatsApp }) {
+  const [dataUrl, setDataUrl] = useState('');
+  const [copied,  setCopied ] = useState(false);
+
+  useEffect(() => {
+    const qrText = buildPayNowQR('+6590705241', amount);
+    if (window.QRCode && typeof window.QRCode.toDataURL === 'function') {
+      window.QRCode.toDataURL(qrText, {
+        width: 280, margin: 1,
+        color: { dark: '#1A1612', light: '#FFFFFF' },
+      }, (err, url) => { if (!err) setDataUrl(url); });
+    }
+  }, [amount]);
+
+  const handleSave = async () => {
+    if (!dataUrl) return;
+    // Try Web Share API first (works well on mobile for saving to Photos)
+    try {
+      const res  = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'paynow-mr-onigiri.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'PayNow QR — Mr Onigiri' });
+        return;
+      }
+    } catch (_) {}
+    // Fallback: trigger download
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = 'paynow-mr-onigiri.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  return (
+    <div style={{ padding:'0 20px 28px' }}>
+      <div style={{ fontWeight:700, fontSize:18, marginBottom:4 }}>PayNow QR Code</div>
+      <div style={{ fontSize:13, color:'#7A6D5E', marginBottom:20 }}>
+        Scan to pay <strong style={{ color:'#1A1612' }}>{fmt(amount)}</strong> to Mr Onigiri @ Funan
+      </div>
+
+      {/* QR image */}
+      <div style={{ display:'flex', justifyContent:'center', marginBottom:20 }}>
+        <div style={{
+          background:'#FFFFFF', padding:16, borderRadius:18,
+          border:'1px solid #EDE6DA',
+          boxShadow:'0 4px 24px rgba(26,22,18,0.08)',
+        }}>
+          {dataUrl
+            ? <img src={dataUrl} width={220} height={220} alt="PayNow QR" style={{ display:'block' }} />
+            : (
+              <div style={{ width:220, height:220, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, color:'#7A6D5E', fontSize:13 }}>
+                <div style={{ width:32, height:32, border:'3px solid #EDE6DA', borderTopColor:'#4c612c', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+                Generating…
+              </div>
+            )
+          }
+        </div>
+      </div>
+
+      {/* Amount label */}
+      <div style={{ textAlign:'center', marginBottom:16 }}>
+        <div style={{ fontSize:12, color:'#7A6D5E', fontWeight:600, letterSpacing:'0.06em', marginBottom:2 }}>TOTAL AMOUNT</div>
+        <div style={{ fontSize:30, fontWeight:800, color:'#1A1612' }}>{fmt(amount)}</div>
+        <div style={{ fontSize:12, color:'#7A6D5E', marginTop:2 }}>PayNow to +65 9070 5241</div>
+      </div>
+
+      {/* Save button */}
+      <button
+        onClick={handleSave}
+        disabled={!dataUrl}
+        style={{
+          width:'100%', height:44, marginBottom:12,
+          background: dataUrl ? '#4c612c' : '#E0D8CE',
+          color: dataUrl ? 'white' : '#7A6D5E',
+          border:'none', borderRadius:12,
+          fontWeight:700, fontSize:14, cursor: dataUrl ? 'pointer' : 'default',
+          display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+          transition:'background .15s',
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Save QR to Phone
+      </button>
+
+      {/* Save tip */}
+      <div style={{ background:'#F0FBF5', border:'1px solid #C5E8D4', borderRadius:10, padding:'11px 14px', marginBottom:16, fontSize:13, color:'#1E7A47', lineHeight:1.6 }}>
+        Tap <strong>Save QR to Phone</strong>, then open your banking app and scan to pay.
+      </div>
+
+      <button
+        onClick={onSendWhatsApp}
+        style={{
+          width:'100%', height:50, border:'none', borderRadius:12,
+          background:'#25D366', color:'white',
+          fontWeight:700, fontSize:15, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center', gap:9,
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+        </svg>
+        I've paid — Send Order via WhatsApp
+      </button>
+    </div>
+  );
+}
+
+// ─── ORDER CONFIRMED ──────────────────────────────────────────────────────────
+function OrderConfirmed({ onReset }) {
+  return (
+    <div style={{
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      minHeight:'100vh', padding:'40px 24px', textAlign:'center', background:'#F6F1E9',
+    }}>
+      <div style={{
+        width:72, height:72, borderRadius:'50%',
+        background:'#F0FBF5', border:'2px solid #C5E8D4',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:32, marginBottom:20,
+      }}>🍱</div>
+      <div style={{ fontWeight:800, fontSize:22, marginBottom:8 }}>Order Sent!</div>
+      <div style={{ fontSize:14, color:'#7A6D5E', marginBottom:28, maxWidth:280, lineHeight:1.6 }}>
+        Your order has been sent to Mr Onigiri @ Funan on WhatsApp. We'll confirm shortly.
+      </div>
+
+      {/* PayNow reminder */}
+      <div style={{
+        width:'100%', maxWidth:320,
+        background:'#F0FBF5', border:'1.5px solid #C5E8D4',
+        borderRadius:14, padding:'16px 18px', textAlign:'left', marginBottom:28,
+      }}>
+        <div style={{ fontWeight:700, color:'#1E7A47', fontSize:14, marginBottom:6 }}>💚 Complete Your Payment</div>
+        <div style={{ fontSize:14, color:'#1A1612', marginBottom:8 }}>
+          PayNow to <strong>90705241</strong>
+        </div>
+        <div style={{ fontSize:13, color:'#7A6D5E', lineHeight:1.6 }}>
+          Send your PayNow screenshot to WhatsApp <strong>+65 9070 5241</strong> to confirm your order.
+        </div>
+      </div>
+
+      <button
+        onClick={onReset}
+        style={{
+          padding:'12px 28px', background:'#4c612c', color:'white',
+          border:'none', borderRadius:12, fontWeight:700, fontSize:14, cursor:'pointer',
+        }}
+      >Place Another Order</button>
+    </div>
+  );
+}
+
+// ─── TAB VIEWS ────────────────────────────────────────────────────────────────
+function AllDaySaverView({ onOrder }) {
+  return (
+    <div style={{ padding:'16px 16px 0' }}>
+      {/* Hero card */}
+      <div style={{ background:'#4c612c', borderRadius:16, padding:'22px 20px 24px', position:'relative', overflow:'hidden', marginBottom:16 }}>
+        {/* Decorative circles */}
+        <div style={{ position:'absolute', top:-40, right:-40, width:140, height:140, borderRadius:'50%', background:'rgba(255,255,255,0.04)' }} />
+        <div style={{ position:'absolute', bottom:-20, right:10,  width:90,  height:90,  borderRadius:'50%', background:'rgba(255,255,255,0.03)' }} />
+
+        <div style={{ position:'relative', zIndex:1 }}>
+          <div style={{ display:'inline-block', background:'#C4622D', color:'white', fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:999, marginBottom:10, letterSpacing:'0.04em' }}>ALL DAY</div>
+          <div style={{ color:'white', fontSize:26, fontWeight:800, lineHeight:1.2, marginBottom:6 }}>All Day Saver Set</div>
+          <div style={{ color:'rgba(255,255,255,0.65)', fontSize:13, marginBottom:16 }}>1 Onigiri + 1 Drink + 1 Side</div>
+          <div style={{ color:'white', fontSize:36, fontWeight:800, marginBottom:20 }}>{fmt(SET_PRICE)}</div>
+          <button
+            onClick={onOrder}
+            style={{ background:'white', color:'#1A1612', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, fontSize:14, cursor:'pointer' }}
+          >Order Now</button>
+        </div>
+      </div>
+
+      {/* Onigiri options card */}
+      <div style={{ background:'white', border:'1px solid #EDE6DA', borderRadius:14, padding:'14px 16px', marginBottom:16 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:'#7A6D5E', letterSpacing:'0.07em', marginBottom:10 }}>CHOOSE YOUR ONIGIRI</div>
+        {ADS_OPTIONS.map((o, i) => (
+          <div key={o.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom: i < ADS_OPTIONS.length-1 ? '1px solid #EDE6DA' : 'none' }}>
+            <div style={{ width:6, height:6, borderRadius:'50%', background:'#C4622D', flexShrink:0 }} />
+            <span style={{ fontSize:14, fontWeight:500 }}>{o.name}</span>
+          </div>
+        ))}
+        <div style={{ marginTop:12, padding:'10px 12px', background:'#F8F5F0', borderRadius:8 }}>
+          <div style={{ fontSize:12, color:'#7A6D5E', lineHeight:1.55 }}>
+            <strong style={{ color:'#1A1612' }}>Drink:</strong> Lemon Tea (Iced/Hot) or Coke Zero
+            <br/>
+            <strong style={{ color:'#1A1612' }}>Side:</strong> Curly Fries or Tater Tots
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OnigiriView({ cart, onOpen }) {
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, padding:'16px 16px 0' }}>
+      {ONIGIRI.map(item => {
+        const qty = Object.values(cart)
+          .filter(c => c.key === item.id || c.key.startsWith(`${item.id}_set_`))
+          .reduce((s, c) => s + c.qty, 0);
+        return (
+          <div
+            key={item.id}
+            onClick={() => onOpen(item)}
+            style={{ background:'white', border:'1px solid #EDE6DA', borderRadius:14, overflow:'hidden', cursor:'pointer', position:'relative' }}
+          >
+            <div style={{ width:'100%', aspectRatio:'4/3', background:'#F0EDE6', position:'relative' }}>
+              <Img src={item.img} alt={item.name} />
+              {qty > 0 && (
+                <div style={{ position:'absolute', top:8, right:8, background:'#C4622D', color:'white', width:22, height:22, borderRadius:999, fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>{qty}</div>
+              )}
+            </div>
+            <div style={{ padding:'10px 12px 12px' }}>
+              {item.badge && <div style={{ marginBottom:4 }}><Badge type={item.badge} /></div>}
+              <div style={{ fontWeight:600, fontSize:13, lineHeight:1.35, marginBottom:5 }}>{item.name}</div>
+              <div style={{ fontWeight:700, fontSize:14 }}>{fmt(item.price)}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ItemListView({ items, cart, onAdd, onRemove }) {
+  return (
+    <div style={{ background:'white', border:'1px solid #EDE6DA', borderRadius:14, margin:'16px 16px 0', overflow:'hidden' }}>
+      <div style={{ padding:'0 16px' }}>
+        {items.map((item, i) => {
+          const count = cart[item.id]?.qty || 0;
+          return (
+            <div key={item.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 0', borderBottom: i < items.length-1 ? '1px solid #EDE6DA' : 'none' }}>
+              <div style={{ width:70, height:70, borderRadius:10, background:'#F0EDE6', flexShrink:0, overflow:'hidden' }}>
+                <Img src={item.img} alt={item.name} />
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                {item.badge && <div style={{ marginBottom:3 }}><Badge type={item.badge} /></div>}
+                <div style={{ fontWeight:600, fontSize:14 }}>{item.name}</div>
+                {item.desc && <div style={{ fontSize:12, color:'#7A6D5E', marginTop:1 }}>{item.desc}</div>}
+                <div style={{ fontWeight:700, fontSize:14, marginTop:4 }}>{fmt(item.price)}</div>
+              </div>
+              <QuickAdd
+                count={count}
+                onAdd={() => onAdd(item)}
+                onRemove={() => onRemove(item.id)}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [tab,          setTab         ] = useState('allDaySaver');
+  const [cart,         setCart        ] = useState({});
+  const [sheet,        setSheet       ] = useState(null);   // 'ads'|'item'|'cart'|'checkout'|'paynow'
+  const [activeItem,   setActiveItem  ] = useState(null);
+  const [pendingOrder, setPendingOrder] = useState(null);   // { name, phone }
+  const [ordered,      setOrdered     ] = useState(false);
+
+  // ── Cart operations ──────────────────────────────────────
+  const addToCart = useCallback((item) => {
+    setCart(prev => {
+      const existing = prev[item.key];
+      return {
+        ...prev,
+        [item.key]: existing
+          ? { ...existing, qty: existing.qty + item.qty }
+          : { ...item },
+      };
+    });
+  }, []);
+
+  const quickAdd = useCallback((item) => {
+    setCart(prev => {
+      const existing = prev[item.id];
+      return {
+        ...prev,
+        [item.id]: existing
+          ? { ...existing, qty: existing.qty + 1 }
+          : { key:item.id, name:item.name, price:item.price, qty:1 },
+      };
+    });
+  }, []);
+
+  const quickRemove = useCallback((id) => {
+    setCart(prev => {
+      const existing = prev[id];
+      if (!existing) return prev;
+      if (existing.qty <= 1) { const { [id]:_, ...rest } = prev; return rest; }
+      return { ...prev, [id]: { ...existing, qty: existing.qty - 1 } };
+    });
+  }, []);
+
+  const updateQty = useCallback((key, qty) => {
+    setCart(prev => ({ ...prev, [key]: { ...prev[key], qty } }));
+  }, []);
+
+  const removeFromCart = useCallback((key) => {
+    setCart(prev => { const { [key]:_, ...rest } = prev; return rest; });
+  }, []);
+
+  const totalItems = Object.values(cart).reduce((s, i) => s + i.qty, 0);
+  const subtotal   = Object.values(cart).reduce((s, i) => s + i.price * i.qty, 0);
+
+  // ── WhatsApp message builder ──────────────────────────────
+  // Step 1: checkout form submitted → store details and show QR
+  const handleCheckoutSubmit = ({ name, phone }) => {
+    setPendingOrder({ name, phone });
+    setSheet('paynow');
+  };
+
+  // Step 2: user taps "I've paid" on QR screen → send WhatsApp and mark ordered
+  const handleSendWhatsApp = () => {
+    if (!pendingOrder) return;
+    const { name, phone } = pendingOrder;
+    const items = Object.values(cart);
+    const lines = items.map(item => {
+      let line = `• ${item.qty}× ${item.name}`;
+      if (item.drink || item.side) line += ` (${[item.drink, item.side].filter(Boolean).join(' + ')})`;
+      line += ` — ${fmt(item.price * item.qty)}`;
+      return line;
+    });
+    const msg = [
+      `🍱 *New Order — Mr Onigiri @ Funan*`,
+      '',
+      name  ? `👤 Name: ${name}`  : null,
+      `📱 Phone: ${phone}`,
+      '',
+      `*Order:*`,
+      ...lines,
+      '',
+      `💰 *Total: ${fmt(subtotal)}*`,
+      '',
+      `💚 Payment: PayNow to 90705241`,
+      `📸 PayNow screenshot sent separately!`,
+    ].filter(l => l !== null).join('\n');
+
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+    setOrdered(true);
+    setSheet(null);
+    setPendingOrder(null);
+  };
+
+  if (ordered) {
+    return <OrderConfirmed onReset={() => { setOrdered(false); setCart({}); setTab('allDaySaver'); }} />;
+  }
+
+  return (
+    <div style={{ maxWidth:430, margin:'0 auto', minHeight:'100vh', background:'#F6F1E9', position:'relative' }}>
+
+      {/* ── Sticky header ───────────────────────────────── */}
+      <div style={{ position:'sticky', top:0, zIndex:100, background:'#F6F1E9', borderBottom:'1px solid #EDE6DA' }}>
+        {/* Logo row */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px 10px' }}>
+          <div style={{ width:38, height:38, borderRadius:10, overflow:'hidden', background:'#EDE6DA', flexShrink:0 }}>
+            <Img src="uploads/logo-1778771449895.jpeg" alt="Logo" />
+          </div>
+          <div>
+            <div style={{ fontWeight:800, fontSize:15, lineHeight:1.2 }}>Mr Onigiri @ Funan</div>
+            <div style={{ fontSize:11, color:'#7A6D5E' }}>Self-Collect · Funan Mall</div>
+          </div>
+        </div>
+
+        {/* Tab bar */}
+        <div style={{ display:'flex', overflowX:'auto', padding:'0 10px', gap:0 }}>
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding:'8px 12px', fontWeight: tab===t.id ? 700 : 500,
+                fontSize:13, color: tab===t.id ? '#1A1612' : '#7A6D5E',
+                background:'none', border:'none',
+                borderBottom: `2px solid ${tab===t.id ? '#4c612c' : 'transparent'}`,
+                whiteSpace:'nowrap', cursor:'pointer',
+                transition:'color .15s, border-color .15s',
+                flexShrink:0,
+              }}
+            >{t.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tab content ─────────────────────────────────── */}
+      <div style={{ paddingBottom: totalItems > 0 ? 96 : 40 }}>
+        {tab === 'allDaySaver' && (
+          <AllDaySaverView onOrder={() => setSheet('ads')} />
+        )}
+        {tab === 'onigiri' && (
+          <OnigiriView
+            cart={cart}
+            onOpen={(item) => { setActiveItem(item); setSheet('item'); }}
+          />
+        )}
+        {tab === 'fingerFood' && (
+          <ItemListView
+            items={FINGER_FOOD}
+            cart={cart}
+            onAdd={quickAdd}
+            onRemove={quickRemove}
+          />
+        )}
+        {tab === 'beverages' && (
+          <ItemListView
+            items={BEVERAGES}
+            cart={cart}
+            onAdd={quickAdd}
+            onRemove={quickRemove}
+          />
+        )}
+      </div>
+
+      {/* ── Cart bar ────────────────────────────────────── */}
+      {totalItems > 0 && (
+        <div style={{
+          position:'fixed', bottom:0, left:'50%', transform:'translateX(-50%)',
+          width:'100%', maxWidth:430, zIndex:100,
+          padding:'10px 16px 20px',
+          background:'linear-gradient(to top, #F6F1E9 65%, transparent)',
+        }}>
+          <button
+            onClick={() => setSheet('cart')}
+            style={{
+              width:'100%', height:52,
+              background:'#4c612c', color:'white',
+              border:'none', borderRadius:14,
+              fontWeight:700, fontSize:15, cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'0 18px',
+            }}
+          >
+            <div style={{ background:'#C4622D', color:'white', width:26, height:26, borderRadius:999, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800 }}>{totalItems}</div>
+            <span>View Cart</span>
+            <span style={{ fontWeight:800 }}>{fmt(subtotal)}</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── Sheets ──────────────────────────────────────── */}
+      <BottomSheet open={sheet==='ads'} onClose={() => setSheet(null)}>
+        <AllDaySaverSheet
+          onAdd={(item) => { addToCart(item); setSheet(null); }}
+          onClose={() => setSheet(null)}
+        />
+      </BottomSheet>
+
+      <BottomSheet open={sheet==='item'} onClose={() => { setSheet(null); setActiveItem(null); }}>
+        <ItemSheet
+          item={activeItem}
+          onAdd={(item) => addToCart(item)}
+          onClose={() => { setSheet(null); setActiveItem(null); }}
+        />
+      </BottomSheet>
+
+      <BottomSheet open={sheet==='cart'} onClose={() => setSheet(null)}>
+        <CartSheet
+          cart={cart}
+          onClose={() => setSheet(null)}
+          onCheckout={() => setSheet('checkout')}
+          onUpdateQty={updateQty}
+          onRemove={removeFromCart}
+        />
+      </BottomSheet>
+
+      <BottomSheet open={sheet==='checkout'} onClose={() => setSheet('cart')}>
+        <CheckoutSheet
+          cart={cart}
+          onConfirm={handleCheckoutSubmit}
+        />
+      </BottomSheet>
+
+      <BottomSheet open={sheet==='paynow'} onClose={() => setSheet('checkout')}>
+        <PayNowQRSheet
+          amount={subtotal}
+          onSendWhatsApp={handleSendWhatsApp}
+        />
+      </BottomSheet>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
