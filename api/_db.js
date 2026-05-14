@@ -7,10 +7,12 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  // Make password_hash nullable for magic-link users (idempotent)
+  await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`.catch(() => {});
   await sql`
     CREATE TABLE IF NOT EXISTS entries (
       id TEXT PRIMARY KEY,

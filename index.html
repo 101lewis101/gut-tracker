@@ -1649,27 +1649,25 @@ window.GutShare = { generateHistoryHTML, generateInsightsHTML, shareContent };
 
 <!-- app.jsx -->
 <script type="text/babel">
-function LoginScreen({ onSignIn }) {
-  const [mode, setMode] = React.useState('login');
+function LoginScreen({ onSignIn, initialError }) {
   const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
+  const [sent, setSent] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState('');
+  const [error, setError] = React.useState(initialError || '');
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!email.trim() || !password) return;
+    if (!email.trim()) return;
     setLoading(true); setError('');
     try {
-      const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const res = await fetch(endpoint, {
+      const res = await fetch('/api/auth/magic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: email.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Something went wrong');
-      onSignIn(data.token, email.trim());
+      setSent(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1682,39 +1680,42 @@ function LoginScreen({ onSignIn }) {
       <div style={{ width: '100%', maxWidth: 360, padding: '0 24px' }}>
         <h1 className="serif" style={{ fontSize: 42, marginBottom: 4 }}>Gut</h1>
         <p className="muted" style={{ fontSize: 14, marginBottom: 28 }}>Food &amp; gut health tracker</p>
-        <form onSubmit={submit} className="stack">
-          <div className="field">
-            <div className="label">Email address</div>
-            <input
-              className="input"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              autoFocus
-              required
-            />
+        {sent ? (
+          <div className="card" style={{ textAlign: 'center', padding: 28 }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>✉️</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Check your email</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              We sent a sign-in link to <strong>{email}</strong>.<br />
+              Click it to sign in — link expires in 15 minutes.
+            </div>
+            <button className="btn btn-ghost btn-sm" style={{ marginTop: 16 }}
+              onClick={() => { setSent(false); setError(''); }}>
+              Use a different email
+            </button>
           </div>
-          <div className="field">
-            <div className="label">Password</div>
-            <input
-              className="input"
-              type="password"
-              placeholder={mode === 'register' ? 'At least 8 characters' : 'Your password'}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
-          <button className="btn btn-primary btn-block" type="submit" disabled={loading}>
-            {loading ? 'Please wait…' : mode === 'register' ? 'Create account' : 'Sign in'}
-          </button>
-          <button type="button" className="btn btn-ghost btn-block" style={{ fontSize: 13 }}
-            onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(''); }}>
-            {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-          </button>
-        </form>
+        ) : (
+          <form onSubmit={submit} className="stack">
+            <div className="field">
+              <div className="label">Your email address</div>
+              <input
+                className="input"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+            {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+            <button className="btn btn-primary btn-block" type="submit" disabled={loading}>
+              {loading ? 'Sending…' : 'Send magic link'}
+            </button>
+            <div className="muted" style={{ fontSize: 12, textAlign: 'center' }}>
+              No password needed. We'll email you a one-click sign-in link.
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -1725,6 +1726,27 @@ function App() {
   const [tab, setTab] = React.useState('today');
   const [addKind, setAddKind] = React.useState(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [magicError, setMagicError] = React.useState('');
+
+  // Exchange ?magic=TOKEN from email link for a session
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const magic = params.get('magic');
+    if (!magic) return;
+    // Remove token from URL immediately
+    window.history.replaceState({}, '', window.location.pathname);
+    fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: magic }),
+    })
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (ok) signIn(data.token, data.email);
+        else setMagicError(data.error || 'Sign-in link failed. Please try again.');
+      })
+      .catch(() => setMagicError('Sign-in link failed. Please try again.'));
+  }, []);
 
   if (authLoading) {
     return (
@@ -1734,7 +1756,7 @@ function App() {
     );
   }
 
-  if (!user) return <LoginScreen onSignIn={signIn} />;
+  if (!user) return <LoginScreen onSignIn={signIn} initialError={magicError} />;
 
   const today = new Date();
   const dateLabel = today.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
