@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gut-tracker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "5173", "-s", "/Users/lewisliu/Library/Mobile Documents/com~apple~CloudDocs/Documents/crowdsense/AI class"],
+      "port": 5173
+    }
+  ]
+}
