@@ -528,26 +528,14 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 <!-- store.jsx -->
 <script type="text/babel">
-const TOKEN_KEY = 'gut_token';
-const EMAIL_KEY = 'gut_email';
-
-function getToken() { return localStorage.getItem(TOKEN_KEY); }
-function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
-function clearToken() { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(EMAIL_KEY); }
-
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 async function apiFetch(path, opts = {}) {
-  const token = getToken();
   const res = await fetch(path, {
     ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
     body: opts.body !== undefined ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)) : undefined,
   });
   if (!res.ok) {
@@ -573,43 +561,15 @@ function rowToEntry(r) {
 }
 
 function useStore() {
-  const [user, setUser] = React.useState(null);
-  const [authLoading, setAuthLoading] = React.useState(true);
   const [entries, setEntries] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
   const [syncing, setSyncing] = React.useState(false);
 
   React.useEffect(() => {
-    if (!getToken()) { setAuthLoading(false); return; }
-    const storedEmail = localStorage.getItem(EMAIL_KEY) || '';
     apiFetch('/api/entries')
-      .then(rows => {
-        setUser({ email: storedEmail });
-        setEntries(rows.map(rowToEntry));
-        setAuthLoading(false);
-      })
-      .catch(err => {
-        if (err.status === 401) clearToken();
-        setAuthLoading(false);
-      });
-  }, []);
-
-  const signIn = React.useCallback(async (token, email) => {
-    setToken(token);
-    localStorage.setItem(EMAIL_KEY, email || '');
-    setSyncing(true);
-    try {
-      const rows = await apiFetch('/api/entries');
-      setEntries(rows.map(rowToEntry));
-      setUser({ email: email || '' });
-    } finally {
-      setSyncing(false);
-    }
-  }, []);
-
-  const signOut = React.useCallback(() => {
-    clearToken();
-    setUser(null);
-    setEntries([]);
+      .then(rows => setEntries(rows.map(rowToEntry)))
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   const addEntry = React.useCallback(async (entry) => {
@@ -688,10 +648,10 @@ function useStore() {
     }
   }, [entries]);
 
-  return { state: { entries }, user, authLoading, syncing, signIn, signOut, addEntry, deleteEntry, clearAll, seedDemo };
+  return { state: { entries }, loading, syncing, addEntry, deleteEntry, clearAll, seedDemo };
 }
 
-window.GutStore = { useStore, apiFetch };
+window.GutStore = { useStore };
 </script>
 
 <!-- util.jsx -->
@@ -1649,106 +1609,13 @@ window.GutShare = { generateHistoryHTML, generateInsightsHTML, shareContent };
 
 <!-- app.jsx -->
 <script type="text/babel">
-function LoginScreen({ onSignIn, initialError }) {
-  const [email, setEmail] = React.useState('');
-  const [sent, setSent] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState(initialError || '');
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setLoading(true); setError('');
-    try {
-      const res = await fetch('/api/auth/magic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Something went wrong');
-      setSent(true);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="app" style={{ alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-      <div style={{ width: '100%', maxWidth: 360, padding: '0 24px' }}>
-        <h1 className="serif" style={{ fontSize: 42, marginBottom: 4 }}>Gut</h1>
-        <p className="muted" style={{ fontSize: 14, marginBottom: 28 }}>Food &amp; gut health tracker</p>
-        {sent ? (
-          <div className="card" style={{ textAlign: 'center', padding: 28 }}>
-            <div style={{ fontSize: 32, marginBottom: 10 }}>✉️</div>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Check your email</div>
-            <div className="muted" style={{ fontSize: 13 }}>
-              We sent a sign-in link to <strong>{email}</strong>.<br />
-              Click it to sign in — link expires in 15 minutes.
-            </div>
-            <button className="btn btn-ghost btn-sm" style={{ marginTop: 16 }}
-              onClick={() => { setSent(false); setError(''); }}>
-              Use a different email
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={submit} className="stack">
-            <div className="field">
-              <div className="label">Your email address</div>
-              <input
-                className="input"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                autoFocus
-                required
-              />
-            </div>
-            {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
-            <button className="btn btn-primary btn-block" type="submit" disabled={loading}>
-              {loading ? 'Sending…' : 'Send magic link'}
-            </button>
-            <div className="muted" style={{ fontSize: 12, textAlign: 'center' }}>
-              No password needed. We'll email you a one-click sign-in link.
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function App() {
-  const { state, user, authLoading, syncing, signIn, signOut, addEntry, deleteEntry, clearAll, seedDemo } = window.GutStore.useStore();
+  const { state, loading, syncing, addEntry, deleteEntry, clearAll, seedDemo } = window.GutStore.useStore();
   const [tab, setTab] = React.useState('today');
   const [addKind, setAddKind] = React.useState(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [magicError, setMagicError] = React.useState('');
 
-  // Exchange ?magic=TOKEN from email link for a session
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const magic = params.get('magic');
-    if (!magic) return;
-    // Remove token from URL immediately
-    window.history.replaceState({}, '', window.location.pathname);
-    fetch('/api/auth/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: magic }),
-    })
-      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
-      .then(({ ok, data }) => {
-        if (ok) signIn(data.token, data.email);
-        else setMagicError(data.error || 'Sign-in link failed. Please try again.');
-      })
-      .catch(() => setMagicError('Sign-in link failed. Please try again.'));
-  }, []);
-
-  if (authLoading) {
+  if (loading) {
     return (
       <div className="app" style={{ alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
         <div className="muted" style={{ fontSize: 14 }}>Loading…</div>
@@ -1756,15 +1623,8 @@ function App() {
     );
   }
 
-  if (!user) return <LoginScreen onSignIn={signIn} initialError={magicError} />;
-
   const today = new Date();
   const dateLabel = today.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-
-  const handleSignOut = () => {
-    signOut();
-    setMenuOpen(false);
-  };
 
   return (
     <div className="app">
@@ -1783,10 +1643,6 @@ function App() {
             <button className="btn btn-sm" onClick={() => { seedDemo(); setMenuOpen(false); }}>Load demo data</button>
             <button className="btn btn-sm" onClick={() => { exportJson(state); setMenuOpen(false); }}>Export JSON</button>
             <button className="btn btn-sm btn-ghost" onClick={() => { clearAll(); setMenuOpen(false); }}>Erase all</button>
-            <button className="btn btn-sm btn-ghost" onClick={handleSignOut}>Sign out</button>
-          </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-            {user.email ? `Signed in as ${user.email} · ` : ''}synced to cloud
           </div>
         </div>
       )}

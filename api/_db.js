@@ -4,19 +4,8 @@ const sql = neon(process.env.DATABASE_URL);
 
 export async function initDb() {
   await sql`
-    CREATE TABLE IF NOT EXISTS users (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
-  // Make password_hash nullable for magic-link users (idempotent)
-  await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`.catch(() => {});
-  await sql`
     CREATE TABLE IF NOT EXISTS entries (
       id TEXT PRIMARY KEY,
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
       kind TEXT NOT NULL CHECK (kind IN ('food', 'bowel', 'symptom')),
       ts BIGINT NOT NULL,
       names JSONB,
@@ -29,6 +18,8 @@ export async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  // Drop user_id column if migrating from auth version
+  await sql`ALTER TABLE entries DROP COLUMN IF EXISTS user_id`.catch(() => {});
 }
 
 export { sql };
