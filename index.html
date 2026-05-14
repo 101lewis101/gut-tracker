@@ -1664,7 +1664,7 @@ function LoginScreen() {
     setLoading(true); setError('');
     const { error } = await window.GutStore.supa.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.href },
+      options: { emailRedirectTo: 'https://gut-tracker-teal.vercel.app' },
     });
     setLoading(false);
     if (error) setError(error.message);
